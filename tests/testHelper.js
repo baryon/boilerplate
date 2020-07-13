@@ -19,11 +19,19 @@ const utxo = {
 }
 const tx = new bsv.Transaction().from(utxo)
 
+//获取原像，原像就是做hash之前的数据。对一个原像计算哈希值，然后再签名
 getPreimage = (tx, lockingScript, inputIndex = 0, inputAmount = inputSatoshis, sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID) => bsv.Transaction.sighash.sighashPreimage(tx, sighashType, inputIndex, bsv.Script.fromASM(lockingScript), new bsv.crypto.BN(inputAmount), flags)
 
-signTx = (tx, privateKey, lockingScript, inputIndex = 0, inputAmount = inputSatoshis, sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID) => bsv.Transaction.sighash.sign(tx, privateKey, sighashType, inputIndex, bsv.Script.fromASM(lockingScript), new bsv.crypto.BN(inputAmount), flags).toTxFormat()
+//对一个交易填入信息再签名
+const signTx = (tx, privateKey, lockingScript, inputIndex = 0, inputAmount = inputSatoshis, sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID) => {
+  const asmLocking = bsv.Script.fromASM(lockingScript)
+  console.log(asmLocking, asmLocking.toHex())
+  return bsv.Transaction.sighash.sign(tx, privateKey, sighashType, inputIndex, asmLocking, new bsv.crypto.BN(inputAmount), flags).toTxFormat()
+}
 
-toHex = x => x.toString('hex')
+const toHex = (x) => { 
+  return x.toString('hex')
+}
 
 async function createLockingTx(address, amountInContract) {
   // step 1: fetch utxos

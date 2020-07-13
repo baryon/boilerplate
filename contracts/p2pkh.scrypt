@@ -1,12 +1,16 @@
 contract DemoP2PKH {
   Ripemd160 pubKeyHash;
 
+  //构造函数，传入的是一个公钥的hash160结果，hash160=Ripemd160(sha256(pubkey))
   constructor(Ripemd160 pubKeyHash) {
     this.pubKeyHash = pubKeyHash;
   }
 
+  //解锁脚本,传入交易签名和公钥
   public function unlock(Sig sig, PubKey pubKey) {
+      //计算解锁公钥的hash160,应该同构造函数的公钥哈希一致
       require(hash160(pubKey) == this.pubKeyHash);
+      //用公钥校验签名
       require(checkSig(sig, pubKey));
   }
 }
