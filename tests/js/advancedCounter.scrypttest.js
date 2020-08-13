@@ -1,11 +1,12 @@
-const path = require('path');
 const { expect } = require('chai');
-const { buildContractClass, bsv } = require('scrypttest');
-
-/**
- * an example test for contract using TxAdvanced
- */
-const { inputIndex, inputSatoshis, tx, getPreimage, toHex } = require('../testHelper');
+const { bsv, buildContractClass, getPreimage, toHex, num2bin, Bytes, Ripemd160 } = require('scryptlib');
+const {
+  inputIndex,
+  inputSatoshis,
+  tx,
+  DataLen,
+  compileContract
+} = require('../../helper');
 
 // make a copy since it will be mutated
 const tx_ = bsv.Transaction.shallowCopy(tx)
@@ -26,15 +27,13 @@ describe('Test sCrypt contract Counter In Javascript', () => {
   let preimage
 
   before(() => {
-    const Counter = buildContractClass(path.join(__dirname, '../../contracts/advancedCounter.scrypt'), tx_, inputIndex, inputSatoshis)
+    const Counter = buildContractClass(compileContract('advancedCounter.scrypt'))
     counter = new Counter()
 
-    lockingScriptCodePart = counter.getLockingScript()
-    const newLockingScript = lockingScriptCodePart +' OP_RETURN 01'
     // append state as passive data
-    const lockingScript = lockingScriptCodePart + ' OP_RETURN 00'
-    counter.setLockingScript(lockingScript)
-    
+    counter.dataLoad = num2bin(0, DataLen)
+
+    const newLockingScript = counter.codePart.toASM() + ' OP_RETURN ' + num2bin(1, DataLen)
     // counter output
     tx_.addOutput(new bsv.Transaction.Output({
       script: bsv.Script.fromASM(newLockingScript),
@@ -43,14 +42,14 @@ describe('Test sCrypt contract Counter In Javascript', () => {
 
     // change output
     tx_.addOutput(new bsv.Transaction.Output({
-      script: bsv.Script.fromASM('OP_DUP OP_HASH160 ' + toHex(pkh) + ' OP_EQUALVERIFY OP_CHECKSIG'),
+      script: bsv.Script.buildPublicKeyHashOut(privateKey.toAddress()),
       satoshis: changeAmount
     }))
 
-    preimage = getPreimage(tx_, lockingScript, 0, inputSatoshis, sighashType)
+    preimage = getPreimage(tx_, counter.lockingScript.toASM(), inputSatoshis, 0, sighashType)
   });
 
   it('should succeed when pushing right preimage & amount', () => {
-    expect(counter.increment(toHex(preimage), outputAmount, toHex(pkh), changeAmount)).to.equal(true);
+    expect(counter.increment(new Bytes(toHex(preimage)), outputAmount, new Ripemd160(toHex(pkh)), changeAmount).verify( { tx: tx_, inputIndex, inputSatoshis } )).to.equal(true);
   });
 });

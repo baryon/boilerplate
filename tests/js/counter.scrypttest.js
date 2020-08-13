@@ -1,48 +1,54 @@
-const path = require('path');
 const { expect } = require('chai');
-const { buildContractClass, bsv } = require('scrypttest');
+const { bsv, buildContractClass, getPreimage, toHex, num2bin, Bytes } = require('scryptlib');
 
-/**
- * an example test for contract using Tx
- */
-const { inputIndex, inputSatoshis, tx, getPreimage, toHex } = require('../testHelper');
+const {
+  inputIndex,
+  inputSatoshis,
+  tx,
+  DataLen,
+  compileContract
+} = require('../../helper');
 
 // make a copy since it will be mutated
 const tx_ = bsv.Transaction.shallowCopy(tx)
-
 const outputAmount = 222222
 
 describe('Test sCrypt contract Counter In Javascript', () => {
-  let counter
-  let preimage
+  let counter, preimage
 
   before(() => {
-    const Counter = buildContractClass(path.join(__dirname, '../../contracts/counter.scrypt'), tx_, inputIndex, inputSatoshis)
+    const Counter = buildContractClass(compileContract('counter.scrypt'))
     counter = new Counter()
 
-    lockingScriptCodePart = counter.getLockingScript()
-    const newLockingScript = lockingScriptCodePart +' OP_RETURN 01'
-    // append state as passive data
-    const lockingScript = lockingScriptCodePart + ' OP_RETURN 00'
-    counter.setLockingScript(lockingScript)
-    
+    // set initial OP_RETURN value
+    counter.dataLoad = num2bin(0, DataLen)
+
+    const newLockingScript = counter.codePart.toASM() + ' OP_RETURN ' + num2bin(1, DataLen)
+
     tx_.addOutput(new bsv.Transaction.Output({
       script: bsv.Script.fromASM(newLockingScript),
       satoshis: outputAmount
     }))
 
-    preimage = getPreimage(tx_, lockingScript)
+    preimage = getPreimage(tx_, counter.lockingScript.toASM(), inputSatoshis)
+
+    // set txContext for verification
+    counter.txContext = {
+      tx: tx_,
+      inputIndex,
+      inputSatoshis
+    }
   });
 
   it('should succeed when pushing right preimage & amount', () => {
-    expect(counter.increment(toHex(preimage), outputAmount)).to.equal(true);
+    expect(counter.increment(new Bytes(toHex(preimage)), outputAmount).verify()).to.equal(true);
   });
 
   it('should fail when pushing wrong preimage', () => {
-    expect(counter.increment(toHex(preimage) + '01', outputAmount)).to.equal(false);
+    expect(() => { counter.increment(new Bytes(toHex(preimage) + '01'), outputAmount).verify() }).to.throws(/failed to verify/);
   });
 
   it('should fail when pushing wrong amount', () => {
-    expect(counter.increment(toHex(preimage), outputAmount - 1)).to.equal(false);
+    expect(() => { counter.increment(new Bytes(toHex(preimage)), outputAmount - 1).verify() }).to.throws(/failed to verify/);
   });
 });
