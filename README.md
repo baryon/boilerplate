@@ -19,6 +19,7 @@ npm test
 ```
 
 ## Directory layout
+For each contract `x`, a source file is at `contracts/x.scrypt`, a test file is at `tests/js/x.scrypttest.js`, and a deployment file is at `deployments/x.js`.
 <pre>
 .
 ├── contracts                       # sCrypt contract files
@@ -35,15 +36,13 @@ npm test
 │   ├── tokenSale.scrypt                # Selling tokens for bitcoins using <a href="https://medium.com/@xiaohuiliu/atomic-swap-on-bitcoin-sv-abc28e836cd5">atomic swap</a>
 │   ├── tokenUtxo.scrypt                # <a href="https://medium.com/@xiaohuiliu/utxo-based-layer-1-tokens-on-bitcoin-sv-f5e86a74c1e1">fungible token</a>
 │   └── util.scrypt                     # utility functions and constants
-├── deployments                         # examples to deploy contract and call its function on testnet
+├── deployments                     # examples to deploy contract and call its function on testnet
+    └── fixture
+        └── autoGen                     # contract description json files
 └── tests                           # contract test files
     ├── js                              # Javascript unit tests
     └── ts                              # Typescript unit tests
 </pre>
-
-## Prepare ##
-
-Before trying to run an example, you should have the contract been compiled to produce a [description json file](https://github.com/scrypt-sv/scryptlib#contract-description-file), which would be used for building contract class. This could be done automatically by running a daemon process with command `npm run watch`. It will monit contract files' change and compile it when necessary. All generated description files are located at `tests/fixture/autoGen`. Make sure it's up to date with the contract before running any test.
 
 ## How to write test for a sCrypt contract
 
@@ -56,30 +55,34 @@ npm install scryptlib
 ```
 
 
-```
+```javascript
 import { buildContractClass } from 'scryptlib';
 ```
 
 
 2. Use the imported function `buildContractClass` to get a reflected contract, which has same properties and methods as defined in the specified sCrypt contract.
 
-```
-const Demo = buildContractClass(loadDesc('demo_desc.json'));
+```javascript
+// build a contract class
+// either by compiling the contract from scratch
+const Demo = buildContractClass(compileContract('demo.scrypt'))
+// or from contract desc file if it's already generated from compilation
+const Demo = buildContractClass(loadDesc('demo_desc.json'))
 ```
 
 Note that `demo_desc.json` is the description file name of the compiled contract, which will be generated automatically if you run `npm run watch` and its name follows the rule `$contractName_desc.json`.
 
 1. Initialize the contract.
 
-```
+```javascript
 demo = new Demo(4, 7);
 ```
 
-4. Write tests for the instantiated contract as you would do in Javascript.
+2. Write tests for the instantiated contract as you would do in Javascript.
 
-```
-expect(demo.unlock(4 + 7).verify()).to.equal(true);
-expect(() => { demo.unlock(4 + 6).verify() }).to.throws(/failed to verify/);
+```javascript
+const result = demo.add(7 + 4).verify()
+expect(result.success, result.error).to.be.true
 ```
 
 ## How to run tests locally
@@ -94,17 +97,24 @@ Run unit tests file within the editor/explorer context menu.
 ### Run from console
 Tests could also be run from the console by executing `npm test`, just like regular Javascript/TypeScript tests.
 
-## How to run examples on testnet
-When your tests succeed locally, you can run them on testnet.
+## How to deploy contracts
 1. Provide a private key with funds in `privateKey.js`
-```
+```javascript
 const key = '$YOUR_PRIVATE_KEY_HERE'
 ```
-
-1. Run an example file on testnet by commands like `node deployments/demo.js`, and the output would appear in the console:
+2. Deploy a contract and call its function by issuing 
+```bash
+node deployments/demo.js
+```
+Output like the following will appear in the console. And you have successfully deployed a contract and called its function on Bitcoin. Sweet!
 
 ```
 locking txid:      8d58ff9067f5fa893b5c695179559e108ebf850d0ce4fd1e42bc872417ffd424
 unlocking txid:    c60b57e93551a6c52282801130649c6a97edcca5d2b28b8b4ae2afe0ee59bf79
 Succeeded on testnet
 ```
+It is **strongly recommended** to test your contract on testnet first, before deploying it on mainnet. Default deployment is on testnet. To switch to mainnet, simply modify `API_PREFIX` in `helper.js`.
+```javascript
+const API_PREFIX = 'https://api.whatsonchain.com/v1/bsv/main'
+```
+Before deploying a contract, make sure the latest contract has been compiled to a [description json file](https://github.com/scrypt-sv/scryptlib#contract-description-file), which is what will get deployed. This could be done automatically by running a daemon process with command `npm run watch`. It will monitor a contract file's change and recompile it when necessary. All generated description files are located at `deployments/fixture/autoGen`. Make sure it's up to date with the contract before deployment.

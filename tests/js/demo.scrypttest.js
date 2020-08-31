@@ -1,9 +1,10 @@
 const { expect } = require('chai');
 const { buildContractClass } = require('scryptlib');
 const { compileContract } = require('../../helper');
+const { DEFAULT_FLAGS } = require('scryptlib/dist/utils');
 
 describe('Test sCrypt contract Demo In Javascript', () => {
-  let demo;
+  let demo, result
 
   before(() => {
     const Demo = buildContractClass(compileContract('demo.scrypt'));
@@ -11,12 +12,16 @@ describe('Test sCrypt contract Demo In Javascript', () => {
   });
 
   it('should return true', () => {
-    expect(demo.add(7 + 4).verify()).to.equal(true);
-    expect(demo.sub(7 - 4).verify()).to.equal(true);
+    result = demo.add(7 + 4).verify()
+    expect(result.success, result.error).to.be.true
+    result = demo.sub(7 - 4).verify()
+    expect(result.success, result.error).to.be.true
   });
 
   it('should throw error', () => {
-    expect(() => { demo.add(0).verify() }).to.throws(/failed to verify/);
-    expect(() => { demo.sub(1).verify() }).to.throws(/failed to verify/);
+    result = demo.add(0).verify()
+    expect(result.success, result.error).to.be.false
+    result = demo.sub(1).verify()
+    expect(result.success, result.error).to.be.false
   });
 });

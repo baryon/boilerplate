@@ -24,6 +24,7 @@ const inputSatoshis = 100000
 const flags = Interpreter.SCRIPT_VERIFY_MINIMALDATA | Interpreter.SCRIPT_ENABLE_SIGHASH_FORKID | Interpreter.SCRIPT_ENABLE_MAGNETIC_OPCODES | Interpreter.SCRIPT_ENABLE_MONOLITH_OPCODES
 const minFee = 546
 const dummyTxId = 'a477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
+const reversedDummyTxId = '5884e5db9de218238671572340b207ee85b628074e7e467096c267266baf77a4'
 
 const utxo = {
   txId: dummyTxId,
@@ -32,6 +33,13 @@ const utxo = {
   satoshis: inputSatoshis
 }
 const tx = new bsv.Transaction().from(utxo)
+
+// reverse hexStr byte order
+function reverseEndian(hexStr) {
+  let num = new BN(hexStr, 'hex')
+  let buf = num.toBuffer()
+  return buf.toString('hex').match(/.{2}/g).reverse().join('')
+}
 
 async function createLockingTx(address, amountInContract, fee) {
   // step 1: fetch utxos
@@ -112,7 +120,7 @@ function compileContract(fileName) {
 
   const result = compile(
     { path: filePath },
-    { desc: true, outputDir: path.join(__dirname, 'tests/fixture/autoGen') }
+    { desc: true, outputDir: path.join(__dirname, 'deployments/fixture/autoGen') }
   );
 
   if (result.errors.length > 0) {
@@ -125,7 +133,7 @@ function compileContract(fileName) {
 }
 
 function loadDesc(fileName) {
-  const filePath = path.join(__dirname, `tests/fixture/autoGen/${fileName}`);
+  const filePath = path.join(__dirname, `deployments/fixture/autoGen/${fileName}`);
   if (!existsSync(filePath)) {
     throw new Error(`Description file ${filePath} not exist!\nIf You already run 'npm run watch', maybe fix the compile error first!`)
   }
@@ -162,6 +170,8 @@ module.exports = {
   createUnlockingTx,
   DataLen,
   dummyTxId,
+  reversedDummyTxId,
+  reverseEndian,
   unlockP2PKHInput,
   sendTx,
   compileContract,
