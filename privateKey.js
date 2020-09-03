@@ -2,7 +2,9 @@ const { exit } = require('process')
 const { bsv } = require('scryptlib');
 
 // fill in private key on testnet in WIF here
-const key = ''
+const key = 'cNnsMY6o4yor9wx3FifGkJ6ZW2amRkqhzFPgdgms9QjFDya6ubhe'
+// New privKey generated for testnet: cNnsMY6o4yor9wx3FifGkJ6ZW2amRkqhzFPgdgms9QjFDya6ubhe
+// With address: n2EL65JVgyqmDXJJG1i7scDjfxDu6gzjjr
 
 if (!key) {
   genPrivKey()
