@@ -19,8 +19,8 @@ const { privateKey } = require('../privateKey');
         console.log('locking txid:     ', lockingTxid)
         
         // unlock
-        const unlockingFn = demo.add(11) //解锁成功
-        // const unlockingFn = demo.add(12) //抛出异常
+        // const unlockingFn = demo.add(11) //解锁成功
+        const unlockingFn = demo.add(12) //抛出异常
         // const unlockingFn = demo.sub(-3) //解锁成功
         // const unlockingFn = demo.sub(3) //抛出异常
         console.log(unlockingFn)

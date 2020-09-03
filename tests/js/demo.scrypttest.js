@@ -33,6 +33,7 @@ describe('Test sCrypt contract Demo In Javascript', () => {
     //解锁脚本传入的是两个数字，12和1，第一个参数估计是参数7+4的结果11。第2参数1估计表示第一个函数，也就是add
     result = addFn.verify()
     console.log(result)
+    console.log(addFn.toScript())
     //result包含两个字段 success， true是成功，否则为false， error字段是出错原因，没出错则为空字符串
     expect(result.success, result.error).to.be.true
     const subFn = demo.sub(7 - 4)
