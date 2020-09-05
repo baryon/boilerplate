@@ -1,20 +1,30 @@
 import "util.scrypt";
 
 contract Counter {
-	public function increment(bytes txPreimage, int amount) {
-        require(Tx.checkPreimage(txPreimage));
+  public function increment(bytes txPreimage, int amount) {
+    //Tx.checkPreimage是一个Tx合约中的静态函数，它检查原像是否同当前交易一致
+    //调用increment函数时，原像中包括了前一个交易锁定脚本，锁定脚本的最后含有一个opreturn 00
+    //这个函数使用了OP_CHECKSIG，进行签名检查
+    //签名检查用了随机生成的公钥私钥
+    require(Tx.checkPreimage(txPreimage));
 
-        bytes scriptCode = Util.scriptCode(txPreimage);
-		int scriptLen = length(scriptCode);
-		
-		// state (i.e., counter value) is at the end
-		int counter = unpack(scriptCode[scriptLen - Util.DataLen :]);
-		// increment counter
-		bytes scriptCode_ = scriptCode[: scriptLen - Util.DataLen] + num2bin(counter + 1, Util.DataLen);
-		// output: amount + scriptlen + script
-		Sha256 hashOutputs = hash256(num2bin(amount, Util.OutputValueLen) + Util.writeVarint(scriptCode_));
-		// ensure output is expected: amount is same with specified
-		// also output script is the same with scriptCode except counter incremented
-		require(hashOutputs == Util.hashOutputs(txPreimage));
-    }
+    //从原像中获取脚本代码部分
+    bytes scriptCode = Util.scriptCode(txPreimage);
+    int scriptLen = length(scriptCode);
+
+    // state (i.e., counter value) is at the end
+    //最后一个字节是数据
+    //从字节转换为int数字
+    int counter = unpack(scriptCode[scriptLen - Util.DataLen : ]);
+    // increment counter
+    //把脚本代码的最后一个字节改为counter+1
+    bytes scriptCode_ = scriptCode[ : scriptLen - Util.DataLen] + num2bin(counter + 1, Util.DataLen);
+    // output: amount + scriptlen + script
+    //获取新的output，这个output是一个hash256， 包括了输入中的satoshi，新的输出脚本
+    Sha256 hashOutputs = hash256(num2bin(amount, Util.OutputValueLen) + Util.writeVarint(scriptCode_));
+    // ensure output is expected: amount is same with specified
+    // also output script is the same with scriptCode except counter incremented
+    //判断新的hashOutputs是否同原像中的hashOutputs一致，就可以确认新的输出符合原锁定脚本的规定
+    require(hashOutputs == Util.hashOutputs(txPreimage));
+  }
 }
