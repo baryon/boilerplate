@@ -20,7 +20,9 @@ contract Counter {
     //把脚本代码的最后一个字节改为counter+1
     bytes scriptCode_ = scriptCode[ : scriptLen - Util.DataLen] + num2bin(counter + 1, Util.DataLen);
     // output: amount + scriptlen + script
-    //获取新的output，这个output是一个hash256， 包括了输入中的satoshi，新的输出脚本
+    //获取新的output，这个output是一个sha256(sha256(b))，真对的是输出，包括输出的satoshi和输出的脚本
+    //OutputValueLen等于8，就是新输出satoshi的数量站8个字节， UInt64LE类型
+    //这里全部假设输入和输出都只有一个
     Sha256 hashOutputs = hash256(num2bin(amount, Util.OutputValueLen) + Util.writeVarint(scriptCode_));
     // ensure output is expected: amount is same with specified
     // also output script is the same with scriptCode except counter incremented

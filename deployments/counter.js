@@ -35,7 +35,7 @@ const { privateKey } = require('../privateKey');
             //获取新脚本
             const newLockingScript = counter.lockingScript.toASM();
             
-            //没交易一次都扣除了交易手续费，FEE为1000
+            //每交易一次都扣除交易手续费，FEE为1000
             const newAmount = amount - FEE
 
             //构造解锁交易，形成新的交易
