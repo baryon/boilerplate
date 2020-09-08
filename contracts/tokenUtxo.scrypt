@@ -9,7 +9,7 @@ contract Token {
         require(tokenAmount0 > 0);
         // 1 to 1 transfer when tokenAmount1 is 0
         require(tokenAmount1 >= 0);
-
+        
         // this ensures the preimage is for the current tx
 		    require(Tx.checkPreimage(txPreimage));
 
@@ -31,7 +31,7 @@ contract Token {
         require(balance0 + balance1 == tokenAmount0 + tokenAmount1);
         
         // persist contract code part, including op_return itself
-        bytes codePart = lockingScript[: amountStart - Util.PubKeyLen];
+        bytes codePart = lockingScript[ : amountStart - Util.PubKeyLen];
         
         // setting first balance as 0 is just a convention, not a requirement
         bytes outputScript0 = codePart + receiver0 + num2bin(0, Util.DataLen) + num2bin(tokenAmount0, Util.DataLen);
@@ -47,8 +47,10 @@ contract Token {
         require(hashOutputs == Util.hashOutputs(txPreimage));
     }
 
-    public function merge(Sig senderSig, PubKey receiver, bytes prevouts, int otherTokenAmount, int satoshiAmount, bytes txPreimage) {
-        require(otherTokenAmount >= 0);
+    // otherPrevTx: tx being spent by the other input of the current tx
+    public function merge(Sig senderSig, PubKey receiver, bytes prevouts, bytes otherPrevTx, int satoshiAmount, bytes txPreimage) {
+        int PrevTxIdLen = 32;
+        int UnlockingScriptIdx = 41;
 
         // this ensures the preimage is for the current tx
 		require(Tx.checkPreimage(txPreimage));
@@ -59,6 +61,8 @@ contract Token {
         int outpointLen = 36;
         // ensure only two inputs are present
         require(len(prevouts) == 2 * outpointLen);
+
+        bytes outpoint = Util.outpoint(txPreimage);
 
         // read previous locking script
         bytes lockingScript = Util.scriptCode(txPreimage);
@@ -74,11 +78,39 @@ contract Token {
         int balance1 = unpack(lockingScript[amountStart + Util.DataLen :]);
 
         // persist contract code part, including op_return itself
-        bytes codePart = lockingScript[: amountStart - Util.PubKeyLen];
-        // input 1
-        bytes amountPart = num2bin(otherTokenAmount, Util.DataLen) + num2bin(balance0 + balance1, Util.DataLen);
+        int codeEnd = amountStart - Util.PubKeyLen;
+        bytes codePart = lockingScript[: codeEnd];
         
-        if (Util.outpoint(txPreimage) == prevouts[ : outpointLen]) {
+        // get the other input's outpoint
+        bytes otherOutpoint = b'';
+        if (outpoint == prevouts[ : outpointLen]) {
+            otherOutpoint = prevouts[outpointLen : ];
+        } else {
+            otherOutpoint = prevouts[: outpointLen];
+        }
+        // verify prexTx of the other input
+        bytes otherPrevTxId = otherOutpoint[ : PrevTxIdLen];
+        require(hash256(otherPrevTx) == otherPrevTxId);
+
+        /*
+         * verify the other input now we have its previous tx
+         */
+        // TODO: assume 1 input, to extend to multiple inputs
+        int unlockingScriptLen = Util.readVarintLen(otherPrevTx[UnlockingScriptIdx : ]);
+        // TODO: only validate output 0 here, to extend to multiple outputs
+        int lockingScriptIdx = UnlockingScriptIdx + unlockingScriptLen + Util.InputSeqLen + 1 /* output count length */ + Util.OutputValueLen;
+        bytes otherLockingScript = Util.readVarint(otherPrevTx[lockingScriptIdx : ]);
+        // ensure prev tx uses the same contract code
+        require(len(otherLockingScript) == len(lockingScript));
+        require(otherLockingScript[: codeEnd] == codePart);
+        // get amount
+        int otherBalance0 = unpack(otherLockingScript[amountStart : amountStart + Util.DataLen]);
+        int otherBalance1 = unpack(otherLockingScript[amountStart + Util.DataLen :]);
+        int otherTokenAmount = otherBalance0 + otherBalance1;
+        require(otherTokenAmount >= 0);
+
+        bytes amountPart = b'';
+        if (outpoint == prevouts[ : outpointLen]) {
             // input 0
             amountPart = num2bin(balance0 + balance1, Util.DataLen) + num2bin(otherTokenAmount, Util.DataLen) ;
         }
