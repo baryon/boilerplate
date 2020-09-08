@@ -11,6 +11,9 @@ contract Util {
 
     static int InputSeqLen = 4;
 
+    //Token Saotoshi amount
+    static int TokenSatoshi = 546;
+
   static function readVarint(bytes b): bytes {
 		int l = 0;
 		bytes ret = b'';

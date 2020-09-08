@@ -1,0 +1,107 @@
+import "util.scrypt";
+
+/**
+ * A improved token protocol based on UTXO model
+ */
+contract Token {
+      // Sig admin;
+      // bytes name;
+      // bytes symbol;
+      // int decimals;
+
+      // constructor(Sig admin, bytes name, bytes symbol, int decimals) {
+      //     this.admin = admin;
+      //     this.name = name;
+      //     this.symbol = symbol;
+      //     this.decimals = decimals;
+      // }
+
+      public function transfer(Sig senderSig, PubKey senderPk, bytes receiverHash, bytes txPreimage) {
+        // The following arguments can be generated using sample code at
+        // https://gist.github.com/scrypt-sv/f6882be580780a88984cee75dd1564c4.js
+        PrivKey privKey = PrivKey(0x621de38d9af72be8585d19584e3954d3fd0dc9752bb9f9fb28c4f9ed7c1e40ea);
+        PubKey pubKey = PubKey(b'02773aca113a3217b67a95d5b78b69bb6386ed443ea5decf0ba92c00d179291921');
+            // invK is the modular inverse of k, the ephemeral key
+        int invK = 0xa2103f96554aba49bbf581738d3b5a38c5a44b6238ffb54cfcca65b8c87ddc08;
+            // r is x coordinate of R, which is kG
+        int r = 0x00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60;
+            // rBigEndian is the signed magnitude representation of r, in big endian
+        bytes rBigEndian = b'00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60';
+        
+        // SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
+        // SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
+        SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.SINGLE | SigHash.FORKID;
+
+        // this ensures the preimage is for the current tx
+        require(Tx.checkPreimageAdvanced(txPreimage, privKey, pubKey, invK, r, rBigEndian, sigHashType));
+
+        // read previous locking script: codePart + OP_RETURN + ownerHash + tokenAmount 
+        bytes lockingScript = Util.scriptCode(txPreimage);
+        int scriptLen = len(lockingScript);
+
+        int tokenStart = scriptLen - Util.OutputValueLen;
+        int tokenAmount = unpack(lockingScript[tokenStart : ]);
+
+        // constant part of locking script: upto OP_RETURN
+        int hashStart = scriptLen - Util.PubKeyHashLen - Util.OutputValueLen;
+        Ripemd160 ownerHash = Ripemd160(lockingScript[hashStart: tokenStart]);
+
+        // authorize
+        require(hash160(senderPk) == ownerHash);
+        //require(checkSig(senderSig, senderPk));
+
+        // write new locking script
+        bytes lockingScript_ = lockingScript[: hashStart] + receiverHash + num2bin(tokenAmount, Util.OutputValueLen);
+        bytes output = num2bin(Util.TokenSatoshi, Util.OutputValueLen) + Util.writeVarint(lockingScript_);
+        require(hash256(output) == Util.hashOutputs(txPreimage));
+    }
+
+    public function split(Sig senderSig, PubKey senderPk, bytes receiverHash, int tokenAmount0, bytes changeHash, int tokenAmount1,  int inputIndex, bytes allOutputs, bytes txPreimage) {
+        require(tokenAmount0 > 0);
+        require(tokenAmount1 > 0);
+        
+        // The following arguments can be generated using sample code at
+        // https://gist.github.com/scrypt-sv/f6882be580780a88984cee75dd1564c4.js
+        PrivKey privKey = PrivKey(0x621de38d9af72be8585d19584e3954d3fd0dc9752bb9f9fb28c4f9ed7c1e40ea);
+        PubKey pubKey = PubKey(b'02773aca113a3217b67a95d5b78b69bb6386ed443ea5decf0ba92c00d179291921');
+            // invK is the modular inverse of k, the ephemeral key
+        int invK = 0xa2103f96554aba49bbf581738d3b5a38c5a44b6238ffb54cfcca65b8c87ddc08;
+            // r is x coordinate of R, which is kG
+        int r = 0x00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60;
+            // rBigEndian is the signed magnitude representation of r, in big endian
+        bytes rBigEndian = b'00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60';
+        
+        // SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
+        SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
+
+        // this ensures the preimage is for the current tx
+        require(Tx.checkPreimageAdvanced(txPreimage, privKey, pubKey, invK, r, rBigEndian, sigHashType));
+
+        // read previous locking script: codePart + OP_RETURN + ownerHash + tokenAmount 
+        bytes lockingScript = Util.scriptCode(txPreimage);
+        int scriptLen = len(lockingScript);
+
+        int tokenStart = scriptLen - Util.OutputValueLen;
+        int tokenAmount = unpack(lockingScript[tokenStart : ]);
+        require(tokenAmount == tokenAmount0 + tokenAmount1);
+
+        // constant part of locking script: upto OP_RETURN
+        int hashStart = scriptLen - Util.PubKeyHashLen - Util.OutputValueLen;
+        Ripemd160 ownerHash = Ripemd160(lockingScript[hashStart: tokenStart]);
+
+        // authorize
+        require(hash160(senderPk) == ownerHash);
+        //require(checkSig(senderSig, senderPk));
+        
+        bytes lockingScript0_ = lockingScript[: hashStart] + receiverHash + num2bin(tokenAmount0, Util.OutputValueLen);
+        bytes lockingScript1_ = lockingScript[: hashStart] + changeHash + num2bin(tokenAmount1, Util.OutputValueLen);
+
+        //TODO: replace output in allOutputs
+        bytes output0 = num2bin(Util.TokenSatoshi, Util.OutputValueLen) + Util.writeVarint(lockingScript0_);
+        bytes output1 = num2bin(Util.TokenSatoshi, Util.OutputValueLen) + Util.writeVarint(lockingScript1_);
+
+        Sha256 hashOutputs = hash256(output0 + output1);
+        
+        require(hashOutputs == Util.hashOutputs(txPreimage));
+    }
+}
