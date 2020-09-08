@@ -162,6 +162,16 @@ function showError(error) {
   }
 };
 
+
+function outputs2Hex(...outputs) {
+  const writer = new bsv.encoding.BufferWriter()
+  outputs.forEach((output=>{
+    output.toBufferWriter(writer)
+  }))
+  const buf = writer.toBuffer()
+  return buf.toString('hex')
+}
+
 module.exports = {
   inputIndex,
   inputSatoshis,
@@ -176,5 +186,6 @@ module.exports = {
   sendTx,
   compileContract,
   loadDesc,
-  showError
+  showError,
+  outputs2Hex
 }

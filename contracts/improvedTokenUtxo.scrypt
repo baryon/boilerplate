@@ -56,7 +56,7 @@ contract Token {
         require(hash256(output) == Util.hashOutputs(txPreimage));
     }
 
-    public function split(Sig senderSig, PubKey senderPk, bytes receiverHash, int tokenAmount0, bytes changeHash, int tokenAmount1,  int inputIndex, bytes allOutputs, bytes txPreimage) {
+    public function split(Sig senderSig, PubKey senderPk, bytes receiverHash, int tokenAmount0, bytes changeHash, int tokenAmount1, bytes prevOutputs, bytes lastOutputs, bytes txPreimage) {
         require(tokenAmount0 > 0);
         require(tokenAmount1 > 0);
         
@@ -96,11 +96,11 @@ contract Token {
         bytes lockingScript0_ = lockingScript[: hashStart] + receiverHash + num2bin(tokenAmount0, Util.OutputValueLen);
         bytes lockingScript1_ = lockingScript[: hashStart] + changeHash + num2bin(tokenAmount1, Util.OutputValueLen);
 
-        //TODO: replace output in allOutputs
+        //concatenating all ouputs
         bytes output0 = num2bin(Util.TokenSatoshi, Util.OutputValueLen) + Util.writeVarint(lockingScript0_);
         bytes output1 = num2bin(Util.TokenSatoshi, Util.OutputValueLen) + Util.writeVarint(lockingScript1_);
 
-        Sha256 hashOutputs = hash256(output0 + output1);
+        Sha256 hashOutputs = hash256(prevOutputs + output0 + output1 + lastOutputs);
         
         require(hashOutputs == Util.hashOutputs(txPreimage));
     }
