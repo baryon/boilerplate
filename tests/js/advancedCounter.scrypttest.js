@@ -26,21 +26,13 @@ describe('Test sCrypt contract Counter In Javascript', () => {
   let counter, preimage, result
 
   before(() => {
-    //advancedCounter
-    //每次花费，会在锁定脚本后面填上购买者的公钥pk和购买的数量，并且要求添加数量乘以价格的Satoshi
-    //所有的Satoshi被绑在合约中只能增加无法花费
-    //输入允许增加其他的p2pkh输入，而输出要求两个，一个是添加了新购买者的合约，一个是找零用的p2pkh输出
     const Counter = buildContractClass(compileContract('advancedCounter.scrypt'))
-    console.log(Counter)
-
     counter = new Counter()
-    console.log(counter)
 
     // append state as passive data
     counter.dataLoad = num2bin(0, DataLen)
 
     const newLockingScript = counter.codePart.toASM() + ' OP_RETURN ' + num2bin(1, DataLen)
-    console.log(newLockingScript)
     // counter output
     tx_.addOutput(new bsv.Transaction.Output({
       script: bsv.Script.fromASM(newLockingScript),
@@ -57,11 +49,9 @@ describe('Test sCrypt contract Counter In Javascript', () => {
   });
 
   it('should succeed when pushing right preimage & amount', () => {
-
-    incrementFn = counter.increment(new Bytes(toHex(preimage)), outputAmount, new Ripemd160(toHex(pkh)), changeAmount)
-    console.log(incrementFn)
-    result = incrementFn.verify( { tx: tx_, inputIndex, inputSatoshis } )
-    console.log(result)
+    // any contract that includes checkSig() must be verified in a given context
+    const context = { tx: tx_, inputIndex, inputSatoshis }
+    result = counter.increment(new Bytes(toHex(preimage)), outputAmount, new Ripemd160(toHex(pkh)), changeAmount).verify(context)
     expect(result.success, result.error).to.be.true;
   });
 });

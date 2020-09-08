@@ -10,7 +10,7 @@ contract Counter {
 
     //从原像中获取脚本代码部分
     bytes scriptCode = Util.scriptCode(txPreimage);
-    int scriptLen = length(scriptCode);
+    int scriptLen = len(scriptCode);
 
     // state (i.e., counter value) is at the end
     //最后一个字节是数据
