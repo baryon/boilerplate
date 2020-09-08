@@ -21,7 +21,7 @@ const Signature = bsv.crypto.Signature
 // Note: ANYONECANPAY | SINGLE
 //const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
 //const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
-const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_SINGLE | Signature.SIGHASH_FORKID
+// const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_SINGLE | Signature.SIGHASH_FORKID
 const outputAmount = 222222
 const changeAmount = 111
 
@@ -38,7 +38,7 @@ describe('Test improvedTokenUtxo contract In Javascript', () => {
   before(() => {
     const Token = buildContractClass(compileContract('improvedTokenUtxo.scrypt'))
     console.log(Token)
-    token = new Token()
+    token = new Token(new Ripemd160(toHex(publicKey)), new Bytes(Buffer.from('Utxo Token').toString('hex')), new Bytes(Buffer.from('UTO').toString('hex')), 8)
     console.log(token)
 
     // append state as passive data
@@ -87,10 +87,14 @@ describe('Test improvedTokenUtxo contract In Javascript', () => {
 
     console.log(token.lockingScript.toASM())
 
-    preimage = getPreimage(tx_, token.lockingScript.toASM(), 546, 0, sighashType)
   });
 
   it('should succeed when transfering', () => {
+
+    //SINGLE Flag
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_SINGLE | Signature.SIGHASH_FORKID
+    preimage = getPreimage(tx_, token.lockingScript.toASM(), 546, 0, sighashType)
+
     // any contract that includes checkSig() must be verified in a given context
     const context = { tx: tx_, inputIndex:0, inputSatoshis:546 }
     //tx是在helper中创建的一个空的交易，填入锁定脚本，使用私钥签名，获取签名
@@ -109,6 +113,11 @@ describe('Test improvedTokenUtxo contract In Javascript', () => {
 
 
   it('should succeed when splitting', () => {
+
+    //ALL Flag
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+    preimage = getPreimage(tx_, token.lockingScript.toASM(), 546, 0, sighashType)
+
     // any contract that includes checkSig() must be verified in a given context
     //第二个输入，分割 0 -》 1 如何创建第二个输入？？？
     const context = { tx: tx_, inputIndex:0, inputSatoshis:546 }
@@ -130,6 +139,27 @@ describe('Test improvedTokenUtxo contract In Javascript', () => {
     splitFn = token.split(new Sig(toHex(sig)), new PubKey(toHex(publicKey)), new Bytes(receiverHash), 40, new Bytes(ownerHash), 60, new Bytes(outputs2Hex(prevOutput)), new Bytes(outputs2Hex(lastOutput)), new Bytes(toHex(preimage)) )
     console.log(splitFn)
     result = splitFn.verify(context)
+    console.log(result)
+    expect(result.success, result.error).to.be.true;
+  });
+
+
+  it('should succeed when burning', () => {
+    //SINGLE Flag
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_SINGLE | Signature.SIGHASH_FORKID
+    preimage = getPreimage(tx_, token.lockingScript.toASM(), 546, 0, sighashType)
+
+    // any contract that includes checkSig() must be verified in a given context
+    const context = { tx: tx_, inputIndex:0, inputSatoshis:546 }
+    //tx是在helper中创建的一个空的交易，填入锁定脚本，使用私钥签名，获取签名
+    sig = signTx(tx, privateKey, token.lockingScript.toASM(), 546, 0 )
+    //transferFn = token.transfer(new Bytes(toHex(preimage)))
+
+    console.log(bsv.Script.fromASM(newLockingScript0).toHex())
+    console.log(new Ripemd160(toHex(publicKey1)))
+    burnFn = token.burn(new Sig(toHex(sig)), new PubKey(toHex(publicKey)), new Sig(toHex(sig)), new PubKey(toHex(publicKey)), new Ripemd160(toHex(publicKey)), new Bytes(toHex(preimage)) )
+    console.log(burnFn)
+    result = burnFn.verify(context)
     console.log(result)
     expect(result.success, result.error).to.be.true;
   });
