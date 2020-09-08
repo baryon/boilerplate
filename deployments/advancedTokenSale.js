@@ -12,6 +12,7 @@ const {
   DataLen,
   loadDesc,
   createLockingTx,
+  createUnlockingTx,
   sendTx,
   showError,
   unlockP2PKHInput
@@ -33,11 +34,11 @@ const boughtEachIteration = [1, 3, 5, 7, 9]
 const numIterations = boughtEachIteration.length
 
 // private keys of buyers - on testnet in WIF
-const key1 = ''
-const key2 = ''
-const key3 = ''
-const key4 = ''
-const key5 = ''
+const key1 = 'cUUk8fqcS8TxVt3dXDjP8pKwD6irUB5V2ebCF7UVJfW3i3kXiBjs'//'mxv7C9BaV1LGkmKNZBdDnut99z23xp6mMD'
+const key2 = 'cTBnbZst1xVysfmLvNWFKYP12Ri29osvZ7AuWPScatUcLy8kH7j1'//'muvRot22uEmcTLe3UudCz4nnnRi5tMF675'
+const key3 = 'cT9RMrxRDdZduB89BEowkTEXDF9QA612NRZiCQrZwQLeju8fv8E7'//myyZ5dBL9X7YBmnJLKDhxYteRwbcpqtUYu
+const key4 = 'cTvyRutPvYKtj39eEkRMAXBsHAY3CkdKjrHmYt3PtcNjrhb8qm1X'//mwicTqgWNoHcm2wKfj7aoWftjWmCqLnaa6
+const key5 = 'cPjPZNvnT4a2xzuYtQsqNNTtw47ERQ97SHLohmHuEoQd36t7Fn5q'//mjL6VF6VpGUHQ6jNhqnJtC6SjEHXTNP9p4
 if (!key1 || !key2 || !key3 || !key4 || !key5) {
   console.log('You must provide private keys to purchase tokens')
   genPrivKey()
@@ -72,12 +73,12 @@ function sleep(ms) {
     const FEE = amount
 
     // lock funds to the script
-    // const lockingTx = await createLockingTx(privateKey.toAddress(), amount)
-    // lockingTx.outputs[0].setScript(advTokenSale.lockingScript)
-    // lockingTx.sign(privateKey)
-    // let lockingTxid = await sendTx(lockingTx)
-    // console.log('funding txid:      ', lockingTxid)
-    let lockingTxid = '2e2d7615521fbc1a049d48fd43d32526d9509800ce7c82bb39a4253c2336cf1f'
+    const lockingTx = await createLockingTx(privateKey.toAddress(), amount)
+    lockingTx.outputs[0].setScript(advTokenSale.lockingScript)
+    lockingTx.sign(privateKey)
+    let lockingTxid = await sendTx(lockingTx)
+    console.log('funding txid:      ', lockingTxid)
+    // let lockingTxid = '2e2d7615521fbc1a049d48fd43d32526d9509800ce7c82bb39a4253c2336cf1f'
 
     // Run five transactions /iterations
     for (i = 0; i < numIterations; i++) {
@@ -101,8 +102,8 @@ function sleep(ms) {
       // The contract expects/enforces this
       const newAmount = amount + spendAmount
 
-      // const unlockingTx = await createUnlockingTx(lockingTxid, amount, prevLockingScript.toASM(), newAmount, advTokenSale.lockingScript.toASM())
-      const unlockingTx = await createLockingTx(privateKeys[i].toAddress(), newAmount, FEE)
+      const unlockingTx = await createUnlockingTx(lockingTxid, amount, prevLockingScript.toASM(), newAmount, advTokenSale.lockingScript.toASM())
+      //const unlockingTx = await createLockingTx(privateKeys[i].toAddress(), newAmount, FEE)
       unlockingTx.outputs[0].setScript(advTokenSale.lockingScript)
 
       // add input point to prevTx

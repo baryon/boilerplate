@@ -14,8 +14,12 @@ describe('Test sCrypt contract TokenSale In Javascript', () => {
   const tokenPriceInSatoshis = 100
 
   before(() => {
+    //名字叫做TokenSale，每次花费，会在锁定脚本后面填上购买者的公钥pk和购买的数量，并且要求添加数量乘以价格的Satoshi
+    //所有的Satoshi被绑在合约中只能增加无法花费
     const TokenSale = buildContractClass(compileContract('tokenSale.scrypt'))
+    console.log(TokenSale)
     tokenSale = new TokenSale(tokenPriceInSatoshis)
+    console.log(tokenSale)
 
     // initial empty state
     tokenSale.dataLoad = ''

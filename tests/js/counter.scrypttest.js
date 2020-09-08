@@ -60,6 +60,7 @@ describe('Test sCrypt contract Counter In Javascript', () => {
     //输入原像和saotoshi
     incrementFn = counter.increment(new Bytes(toHex(preimage)), outputAmount)
     console.log(incrementFn)
+    console.log(incrementFn.unlockingScript.toASM())
     result = incrementFn.verify()
     console.log(result)
     expect(result.success, result.error).to.be.true
