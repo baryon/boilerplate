@@ -10,6 +10,8 @@ contract Util {
     static int PubKeyHashLen = 20;
 
     static int InputSeqLen = 4;
+    static int IndexLen = 4;
+    static int ContractIdLen = 32;
 
     //Token Saotoshi amount
     static int TokenSatoshi = 546;
