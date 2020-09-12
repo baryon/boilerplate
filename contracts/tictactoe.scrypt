@@ -25,14 +25,9 @@ contract TicTacToe {
         // not filled
         require(board[n] == TicTacToe.EMPTY);
 
-        byte play = TicTacToe.BOB;
-        if(turn == 0 ) {
-          play = TicTacToe.ALICE; 
-        } 
-        PubKey player = this.bob;
-        if(turn == 0 ) {
-          player = this.alice; 
-        } 
+        byte play = turn == 0 ? TicTacToe.ALICE : TicTacToe.BOB;
+        PubKey player = turn == 0 ? this.alice: this.bob;
+        
         // ensure it's player's turn
         require(checkSig(sig, player));
         // make the move

@@ -21,7 +21,7 @@ describe('Test sCrypt contract Util In Javascript', () => {
     it('should return true', () => {
         parser = util.testPreimageParsing(new Bytes(toHex(preimage)))
         console.log(parser)
-        //TODO: 这个的三个参数什么意思？
+        //校验的时候需要环境
         result = parser.verify({ tx, inputIndex, inputSatoshis })
         console.log(result)
         expect(result.success, result.error).to.be.true

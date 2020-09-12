@@ -22,27 +22,11 @@ contract Token {
         return num2bin(Util.NotifySatoshi, Util.OutputValueLen);
       }
 
-      function checkPreimage(bytes txPreimage, SigHashType sigHashType) : bool {
-        // The following arguments can be generated using sample code at
-        // https://gist.github.com/scrypt-sv/f6882be580780a88984cee75dd1564c4.js
-        PrivKey privKey = PrivKey(0x621de38d9af72be8585d19584e3954d3fd0dc9752bb9f9fb28c4f9ed7c1e40ea);
-        PubKey pubKey = PubKey(b'02773aca113a3217b67a95d5b78b69bb6386ed443ea5decf0ba92c00d179291921');
-            // invK is the modular inverse of k, the ephemeral key
-        int invK = 0xa2103f96554aba49bbf581738d3b5a38c5a44b6238ffb54cfcca65b8c87ddc08;
-            // r is x coordinate of R, which is kG
-        int r = 0x00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60;
-            // rBigEndian is the signed magnitude representation of r, in big endian
-        bytes rBigEndian = b'00f0fc43da25095812fcddde7d7cd353990c62b078e1493dc603961af25dfc6b60';
-
-        // this ensures the preimage is for the current tx
-        return Tx.checkPreimageAdvanced(txPreimage, privKey, pubKey, invK, r, rBigEndian, sigHashType);
-      } 
-
       public function initiate(Sig issuerSig, Ripemd160 ownerPKH, Ripemd160 changePKH, int changeSatoshi, bytes txPreimage) {
         // this ensures the preimage is for the current tx
         SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
         // SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
-        require(this.checkPreimage(txPreimage, sigHashType));
+        require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
 
         // authorize
         require(checkSig(issuerSig,  this.issuerPubKey));
@@ -92,7 +76,7 @@ contract Token {
         // this ensures the preimage is for the current tx
         SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
         // SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
-        require(this.checkPreimage(txPreimage, sigHashType));
+        require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
 
         // authorize
         require(checkSig(issuerSig,  this.issuerPubKey));
@@ -140,7 +124,7 @@ contract Token {
       public function punish(bytes txPreimage, bytes prevTx, bytes prevPrevTx) {
         // this ensures the preimage is for the current tx
         SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
-        require(this.checkPreimage(txPreimage, sigHashType));
+        require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
 
         //check value
         if(this.holderSatoshi != Util.value(txPreimage)) {
@@ -175,7 +159,7 @@ contract Token {
       public function transfer(Sig senderSig, PubKey senderPubKey, Ripemd160 receiverPKH, bytes txPreimage) {
         // this ensures the preimage is for the current tx
         SigHashType sigHashType = SigHash.SINGLE | SigHash.FORKID;
-        require(this.checkPreimage(txPreimage, sigHashType));
+        require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
 
         //check value
         require(this.holderSatoshi == Util.value(txPreimage));
@@ -215,7 +199,7 @@ contract Token {
         
         // this ensures the preimage is for the current tx
         SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
-        require(this.checkPreimage(txPreimage, sigHashType));
+        require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
 
         //check value
         require(this.holderSatoshi == Util.value(txPreimage));
@@ -270,7 +254,7 @@ contract Token {
     public function burn(Sig ownerSig, PubKey ownerPK, Ripemd160 changePKH, int changeSatoshi, bytes txPreimage) {
         SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
         // this ensures the preimage is for the current tx
-        require(this.checkPreimage(txPreimage, sigHashType));
+        require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
 
         //check value
         require(this.holderSatoshi == Util.value(txPreimage));
