@@ -172,6 +172,16 @@ function outputs2Hex(...outputs) {
   return buf.toString('hex')
 }
 
+function string2Hex(utf8str, size) {
+  const buf = Buffer.alloc(size, utf8str.padEnd(size, ' '), 'utf8');
+  return buf.toString('hex')
+}
+
+function hex2String(hex) {
+  const buf = Buffer.from(hex, 'hex')
+  return buf.toString('utf8').trim()
+}
+
 module.exports = {
   inputIndex,
   inputSatoshis,
@@ -187,5 +197,6 @@ module.exports = {
   compileContract,
   loadDesc,
   showError,
-  outputs2Hex
+  string2Hex,
+  hex2String
 }

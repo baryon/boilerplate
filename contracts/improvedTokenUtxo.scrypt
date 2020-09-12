@@ -5,13 +5,21 @@ import "util.scrypt";
  */
 contract Token {
       PubKey issuerPubKey;
+      int maxSupply;
+      int holderSatoshi;
 
-      constructor(PubKey issuerPubKey) {
+      constructor(PubKey issuerPubKey, int maxSupply, int holderSatoshi) {
           this.issuerPubKey = issuerPubKey;
+          this.maxSupply = maxSupply;
+          this.holderSatoshi = holderSatoshi;
       }
 
-      function tokenSatoshiBytes(): bytes {
-        return num2bin(Util.TokenSatoshi, Util.OutputValueLen);
+      function holderSatoshiBytes(): bytes {
+        return num2bin(this.holderSatoshi, Util.OutputValueLen);
+      }
+
+      function notifySatoshiBytes(): bytes {
+        return num2bin(Util.NotifySatoshi, Util.OutputValueLen);
       }
 
       function checkPreimage(bytes txPreimage, SigHashType sigHashType) : bool {
@@ -30,117 +38,228 @@ contract Token {
         return Tx.checkPreimageAdvanced(txPreimage, privKey, pubKey, invK, r, rBigEndian, sigHashType);
       } 
 
-      public function initiate(Sig issuerSig, Ripemd160 ownerPKH, bytes contractId, Ripemd160 changePKH, int changeSatoshi, bytes txPreimage) {
+      public function initiate(Sig issuerSig, Ripemd160 ownerPKH, Ripemd160 changePKH, int changeSatoshi, bytes txPreimage) {
         // this ensures the preimage is for the current tx
-        SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
+        SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
+        // SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
         require(this.checkPreimage(txPreimage, sigHashType));
 
         // authorize
         require(checkSig(issuerSig,  this.issuerPubKey));
         
-        //outpoint (32-byte hash + 4-byte little endian)
-        bytes outpoint = Util.outpoint(txPreimage);
-        require(outpoint == reverseBytes32(contractId) + num2bin(0, Util.IndexLen) );
+        //check value
+        require(this.holderSatoshi == Util.value(txPreimage));
 
+        //outpoint (32-byte hash + 4-byte little endian)
+        bytes prevOutpoint = Util.outpoint(txPreimage);
+        bytes contractId = prevOutpoint[ : 32];
 
         // read previous locking script: 
-        // codePart + OP_RETURN + name(64bytes) + symbol(16bytes) + issuer(64bytes) + rule(1byte) + decimals(1byte) + initialSupply(8bytes)   = 154bytes
+        // codePart + OP_RETURN + name(64bytes) + symbol(16bytes) + issuer(64bytes) + rule(1byte) + holderSatoshi(4bytes) + decimals(1byte) + initialSupply(8bytes)   = 158bytes
         bytes lockingScript = Util.scriptCode(txPreimage);
         int scriptLen = len(lockingScript);
+        bytes lockingScriptBody = lockingScript[: scriptLen - 158];
 
         int tokenStart = scriptLen - Util.OutputValueLen;
         int initialSupply = unpack(lockingScript[tokenStart : ]);
 
-        // write new locking script
-        // codePart + OP_RETURN + contractId(32bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 60bytes
-        bytes lockingScript_ = lockingScript[: 154] + contractId + ownerPKH + num2bin(initialSupply, Util.OutputValueLen);
-        bytes output = this.tokenSatoshiBytes() + Util.writeVarint(lockingScript_);
+        // write Token UTXO locking script
+        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
+        bytes tokenLockingScript = lockingScriptBody + contractId + prevOutpoint + ownerPKH + num2bin(initialSupply, Util.OutputValueLen);
+        bytes output = this.holderSatoshiBytes() + Util.writeVarint(tokenLockingScript);
+
+        // write Baton UTXO locking script
+        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 96bytes
+        bytes batonLockingScript = lockingScriptBody + contractId + prevOutpoint + num2bin(initialSupply, Util.OutputValueLen);
+        output = output + this.holderSatoshiBytes() + Util.writeVarint(batonLockingScript);
 
      		// Expect the notify output
         bytes notifyScript = Util.buildPublicKeyHashScript(ownerPKH);
-        bytes notifyOutput = this.tokenSatoshiBytes() + Util.writeVarint(notifyScript);
-        output = output + notifyOutput;
+        output = output + this.notifySatoshiBytes() + Util.writeVarint(notifyScript);
 
         if(changeSatoshi != 0 ) {
             // the change output
             bytes changeScript = Util.buildPublicKeyHashScript(changePKH);
-            bytes changeOutput = num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(changeScript);
-            output = output + changeOutput;
+            output = output + num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(changeScript);
         }
 
         require(hash256(output) == Util.hashOutputs(txPreimage));
       }
 
-      public function transfer(Sig senderSig, PubKey senderPubKey, Ripemd160 receiverPKH, bytes txPreimage) {
+      public function issue(Sig issuerSig, Ripemd160 ownerPKH, int supply, Ripemd160 changePKH, int changeSatoshi, bytes txPreimage) {
+        require(supply > 0);
+
         // this ensures the preimage is for the current tx
-        SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.SINGLE | SigHash.FORKID;
+        SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
+        // SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
         require(this.checkPreimage(txPreimage, sigHashType));
 
-        // read previous locking script: 
-        // codePart + OP_RETURN + contractId(32bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 60bytes
+        // authorize
+        require(checkSig(issuerSig,  this.issuerPubKey));
+        
+        //check value
+        require(this.holderSatoshi == Util.value(txPreimage));
+
+        //outpoint (32-byte hash + 4-byte little endian)
+        bytes prevOutpoint = Util.outpoint(txPreimage);
+
+        // read previous Baton locking script: 
+        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 96bytes
         bytes lockingScript = Util.scriptCode(txPreimage);
         int scriptLen = len(lockingScript);
+        bytes lockingScriptBody = lockingScript[: scriptLen - 44]; //prevOutpoint(36bytes) + totalSupply(8bytes) = 44bytes
+        // scriptBody = codePart + OP_RETURN + contractId(32bytes)
+
+        int tokenStart = scriptLen - Util.OutputValueLen;
+        int totalSupply = unpack(lockingScript[tokenStart : ]) + supply;
+        require( this.maxSupply == 0 || totalSupply < this.maxSupply );
+
+        // write Token UTXO locking script
+        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
+        bytes tokenLockingScript = lockingScriptBody + prevOutpoint + ownerPKH + num2bin(supply, Util.OutputValueLen);
+        bytes output = this.holderSatoshiBytes() + Util.writeVarint(tokenLockingScript);
+
+        // write Baton UTXO locking script
+        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 96bytes
+        bytes batonLockingScript = lockingScriptBody + prevOutpoint + num2bin(totalSupply, Util.OutputValueLen);
+        output = output + this.holderSatoshiBytes() + Util.writeVarint(batonLockingScript);
+
+     		// Expect the notify output
+        bytes notifyScript = Util.buildPublicKeyHashScript(ownerPKH);
+        output = output + this.notifySatoshiBytes() + Util.writeVarint(notifyScript);
+
+        if(changeSatoshi != 0 ) {
+            // the change output
+            bytes changeScript = Util.buildPublicKeyHashScript(changePKH);
+            output = output + num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(changeScript);
+        }
+
+        require(hash256(output) == Util.hashOutputs(txPreimage));
+      }
+
+      public function punish(bytes txPreimage, bytes prevTx, bytes prevPrevTx) {
+        // this ensures the preimage is for the current tx
+        SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
+        require(this.checkPreimage(txPreimage, sigHashType));
+
+        //check value
+        if(this.holderSatoshi != Util.value(txPreimage)) {
+          exit(true);
+        }
+
+        // bytes outpoint = Util.outpoint(txPreimage);
+        // bytes prevTxId = outpoint[ : 32];
+        // require(hash256(prevTx) == prevTxId);
+            
+        // //outpoint (32-byte hash + 4-byte little endian)
+        // bytes lockingScript = Util.scriptCode(txPreimage);
+        // // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
+        // int scriptLen = len(lockingScript);
+        // //prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 64bytes
+        // //ownerPkh(20bytes) + tokenAmount(8bytes) = 28bytes
+        // bytes prevOutpoint = lockingScript[scriptLen - 64 : scriptLen - 28 ]; 
+        // bytes prevPrevTxId = prevOutpoint[ : 32]
+        // if(hash256(prevPrevTx) != prevPrevTxId) {
+        //   exit(true);
+        // }
+
+        // //check tx size
+        // if(len(prevPrevTx) <= len(txPreimage)) {
+        //   exit(true);
+        // }
+
+        require(false);
+      }
+
+
+      public function transfer(Sig senderSig, PubKey senderPubKey, Ripemd160 receiverPKH, bytes txPreimage) {
+        // this ensures the preimage is for the current tx
+        SigHashType sigHashType = SigHash.SINGLE | SigHash.FORKID;
+        require(this.checkPreimage(txPreimage, sigHashType));
+
+        //check value
+        require(this.holderSatoshi == Util.value(txPreimage));
+
+        // read previous locking script: 
+        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
+        bytes lockingScript = Util.scriptCode(txPreimage);
+        int scriptLen = len(lockingScript);
+        bytes lockingScriptBody = lockingScript[: scriptLen - 64]; //prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 64bytes
+        // scriptBody = codePart + OP_RETURN + contractId(32bytes)
 
         int tokenStart = scriptLen - Util.OutputValueLen;
         int tokenAmount = unpack(lockingScript[tokenStart : ]);
 
         // constant part of locking script: upto OP_RETURN
         int hashStart = scriptLen - Util.PubKeyHashLen - Util.OutputValueLen;
-        Ripemd160 ownerHash = Ripemd160(lockingScript[hashStart: tokenStart]);
+        Ripemd160 ownerPKH = Ripemd160(lockingScript[hashStart: tokenStart]);
 
         // authorize
-        require(hash160(senderPubKey) == ownerHash);
+        require(hash160(senderPubKey) == ownerPKH);
         require(checkSig(senderSig, senderPubKey));
 
+        require(ownerPKH != receiverPKH );
+
+        //outpoint (32-byte hash + 4-byte little endian)
+        bytes prevOutpoint = Util.outpoint(txPreimage);
+
         // write new locking script
-        bytes lockingScript_ = lockingScript[: hashStart] + receiverPKH + num2bin(tokenAmount, Util.OutputValueLen);
-        bytes output = this.tokenSatoshiBytes() + Util.writeVarint(lockingScript_);
+        bytes lockingScript_ = lockingScriptBody + prevOutpoint + receiverPKH + num2bin(tokenAmount, Util.OutputValueLen);
+        bytes output = this.holderSatoshiBytes() + Util.writeVarint(lockingScript_);
         require(hash256(output) == Util.hashOutputs(txPreimage));
     }
 
-    public function split(Sig senderSig, PubKey senderPubKey, Ripemd160 receiverPKH, int tokenAmount0, Ripemd160 changeTokenPKH, int tokenAmount1, Ripemd160 changeSatoshiPKH, int changeSatoshi, bytes txPreimage) {
-        require(tokenAmount0 > 0);
-        require(tokenAmount1 > 0);
+    public function split(Sig senderSig, PubKey senderPubKey, Ripemd160 receiverPKH, int receiverTokenAmount, int changeTokenAmount, Ripemd160 changeSatoshiPKH, int changeSatoshi, bytes txPreimage) {
+        require(receiverTokenAmount > 0);
+        require(changeTokenAmount > 0);
         
         // this ensures the preimage is for the current tx
-        SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
+        SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
         require(this.checkPreimage(txPreimage, sigHashType));
 
+        //check value
+        require(this.holderSatoshi == Util.value(txPreimage));
+
         // read previous locking script: 
-        // codePart + OP_RETURN + contractId(32bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 60bytes
+        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
         bytes lockingScript = Util.scriptCode(txPreimage);
         int scriptLen = len(lockingScript);
+        bytes lockingScriptBody = lockingScript[: scriptLen - 64]; //prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 64bytes
+        // scriptBody = codePart + OP_RETURN + contractId(32bytes)
 
         int tokenStart = scriptLen - Util.OutputValueLen;
         int tokenAmount = unpack(lockingScript[tokenStart : ]);
-        require(tokenAmount == tokenAmount0 + tokenAmount1);
+        require(tokenAmount == receiverTokenAmount + changeTokenAmount);
 
         // constant part of locking script: upto OP_RETURN
         int hashStart = scriptLen - Util.PubKeyHashLen - Util.OutputValueLen;
-        Ripemd160 ownerHash = Ripemd160(lockingScript[hashStart: tokenStart]);
+        Ripemd160 ownerPKH = Ripemd160(lockingScript[hashStart: tokenStart]);
 
         // authorize
-        require(hash160(senderPubKey) == ownerHash);
+        require(hash160(senderPubKey) == ownerPKH);
         require(checkSig(senderSig, senderPubKey));
-        
-        bytes lockingScript0_ = lockingScript[: hashStart] + receiverPKH + num2bin(tokenAmount0, Util.OutputValueLen);
-        bytes lockingScript1_ = lockingScript[: hashStart] + changeTokenPKH + num2bin(tokenAmount1, Util.OutputValueLen);
+
+        require(ownerPKH != receiverPKH );
+
+        //outpoint (32-byte hash + 4-byte little endian)
+        bytes prevOutpoint = Util.outpoint(txPreimage);
+
+        bytes lockingScript0 = lockingScriptBody + prevOutpoint + receiverPKH + num2bin(receiverTokenAmount, Util.OutputValueLen);
+        bytes lockingScript1 = lockingScriptBody + prevOutpoint + ownerPKH + num2bin(changeTokenAmount, Util.OutputValueLen);
 
         //concatenating all ouputs
-        bytes output0 = this.tokenSatoshiBytes() + Util.writeVarint(lockingScript0_);
-        bytes output1 = this.tokenSatoshiBytes() + Util.writeVarint(lockingScript1_);
+        bytes output0 = this.holderSatoshiBytes() + Util.writeVarint(lockingScript0);
+        bytes output1 = this.holderSatoshiBytes() + Util.writeVarint(lockingScript1);
         bytes output = output0 + output1;
 
      		// Expect the notify output
         bytes notifyScript = Util.buildPublicKeyHashScript(receiverPKH);
-        bytes notifyOutput = this.tokenSatoshiBytes() + Util.writeVarint(notifyScript);
-        output = output + notifyOutput;
+        output = output + this.notifySatoshiBytes() + Util.writeVarint(notifyScript);
 
         if(changeSatoshi != 0 ) {
             // the change output
             bytes changeScript = Util.buildPublicKeyHashScript(changeSatoshiPKH);
-            bytes changeOutput = num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(changeScript);
-            output = output + changeOutput;
+            output = output + num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(changeScript);
         }
 
         require(hash256(output) == Util.hashOutputs(txPreimage));
@@ -149,12 +268,15 @@ contract Token {
 
     // burn a token utxo back to normal bitcoins
     public function burn(Sig ownerSig, PubKey ownerPK, Ripemd160 changePKH, int changeSatoshi, bytes txPreimage) {
-        SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
-
+        SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
         // this ensures the preimage is for the current tx
         require(this.checkPreimage(txPreimage, sigHashType));
 
-        // read previous locking script: codePart + OP_RETURN + contractId(32bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) 
+        //check value
+        require(this.holderSatoshi == Util.value(txPreimage));
+
+        // read previous locking script: 
+        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
         bytes lockingScript = Util.scriptCode(txPreimage);
         int scriptLen = len(lockingScript);
 
