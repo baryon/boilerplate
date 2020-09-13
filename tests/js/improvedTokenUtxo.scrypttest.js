@@ -1,4 +1,4 @@
-const { expect } = require('chai');
+const { assert } = require('chai');
 const { bsv, buildContractClass, getPreimage, toHex, Sig, signTx, PubKey, num2bin, Bytes, Ripemd160 } = require('scryptlib');
 const {
   inputIndex,
@@ -18,7 +18,7 @@ const {
 // Test keys
 const issuerPrivKey = new bsv.PrivateKey.fromRandom('testnet')
 const issuerPubKey = issuerPrivKey.publicKey
-// const pkh = bsv.crypto.Hash.sha256ripemd160(publicKey.toBuffer())
+const issuerPKH = bsv.crypto.Hash.sha256ripemd160(issuerPubKey.toBuffer())
 
 const Signature = bsv.crypto.Signature
 // Note: ANYONECANPAY | SINGLE
@@ -34,14 +34,12 @@ describe('Test improvedTokenUtxo contract In Javascript', () => {
 
   let output0, output1, output2, changeOutput
 
-  // const privateKey1 = new bsv.PrivateKey.fromRandom('testnet')
-  // const publicKey1 = bsv.PublicKey.fromPrivateKey(privateKey1)
 
 
   before(() => {
     //编译脚本创建合约
     Token = buildContractClass(compileContract('improvedTokenUtxo.scrypt'))
-    console.log(Token, Token.abiCoder)
+    //console.log(Token, Token.abiCoder)
     //创建一个Dummy Token
     const token = new Token(new PubKey(toHex(issuerPubKey)), 0, 0)
     //根据Dummy Token的脚本长度，计算holderSatoshi
@@ -52,10 +50,13 @@ describe('Test improvedTokenUtxo contract In Javascript', () => {
 
   it('initiate with maxSupply = 0', () => {
 
+    const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+    //const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+
     //Token增发无限制
-    const maxSupply = 0
+    const maxSupply = 1024
     const token = new Token(new PubKey(toHex(issuerPubKey)), maxSupply, holderSatoshi)
-    console.log(token)
+    //console.log(token)
     //设置初始化状态
     /// name(64bytes) + symbol(16bytes) + issuer(64bytes) + rule(1byte) + holderSatoshi(4bytes) + decimals(1byte) + initialSupply(8bytes)   = 158bytes
     const name = "Test Fungible Token"
@@ -64,7 +65,7 @@ describe('Test improvedTokenUtxo contract In Javascript', () => {
     const rule = 0
     const decimals = 0
     const initialSupply = 1024
-    const dataLoad = string2Hex(name, 64) + string2Hex(symbol, 16) + string2Hex(issuer, 64) + num2bin(rule, 1) + num2bin(holderSatoshi, 4) + num2bin(decimals, 1) + num2bin(initialSupply, 8)
+    const dataLoad =  num2bin(decimals, 1) + num2bin(initialSupply, 8)//string2Hex(name, 64)// + string2Hex(symbol, 16) + string2Hex(issuer, 64) + num2bin(rule, 1) + num2bin(holderSatoshi, 4) + num2bin(decimals, 1) + num2bin(initialSupply, 8)
     
     token.dataLoad = dataLoad
 
@@ -77,24 +78,78 @@ describe('Test improvedTokenUtxo contract In Javascript', () => {
     console.log(num2bin(decimals, 1))
     console.log(num2bin(initialSupply, 8))
 
-    console.log(dataLoad)
+    // console.log(dataLoad)
 
-    console.log(token.codePart.toASM())
+    //console.log(token.lockingScript.toHex())
 
 
     //创建一个带有P2PKH UTXO的输入空交易
-    const tx_ = bsv.Transaction.shallowCopy(tx)
+    tx_ = new bsv.Transaction()
+
+    tx_.addInput(new bsv.Transaction.Input({
+      prevTxId: dummyTxId,
+      outputIndex: 0,
+      script: ''
+    }), bsv.Script.fromASM(token.lockingScript.toASM()), holderSatoshi)
+
+    tx_.addInput(new bsv.Transaction.Input({
+      prevTxId: dummyTxId,
+      outputIndex: 1,
+      script: ''
+    }), bsv.Script.buildPublicKeyHashOut(issuerPubKey), 10000)
+
+    //构造preimage
+    let preimage = getPreimage(tx_, token.lockingScript.toASM(), holderSatoshi, 0, sighashType)
+    console.log(preimage.length)
+
+    const prevOutpoint = preimage.slice(68,104).toString('hex')
+    const contractId = preimage.slice(68,100).reverse().toString('hex')
+    console.log(contractId, prevOutpoint)
+    assert.equal(contractId, dummyTxId);
+
+    // const contractId = dummyTxId 
+
+    const ownerPrivKey = new bsv.PrivateKey.fromRandom('testnet')
+    const ownerPubKey = bsv.PublicKey.fromPrivateKey(ownerPrivKey)
+    const ownerPKH = bsv.crypto.Hash.sha256ripemd160(ownerPubKey.toBuffer())
 
     //创建 UTXO Token LockingScript
-    const newLockingScript = token.codePart.toASM() + ' OP_RETURN ' + toHex(publicKey1) + num2bin(balance1, DataLen) + toHex(publicKey2) + num2bin(balance2, DataLen)
-    console.log(newLockingScript)
+    // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
+    const data = num2bin(2, 1) + num2bin(initialSupply, 8) // + contractId// + prevOutpoint + toHex(ownerPKH) + num2bin(initialSupply, 8)
+    const tokenLockingScript = token.codePart.toASM() + ' OP_RETURN ' + data
+
+    console.log(data)
+    console.log(tokenLockingScript)
 
     tx_.addOutput(new bsv.Transaction.Output({
-      script: bsv.Script.fromASM(newLockingScript),
-      satoshis: outputAmount
+      script: bsv.Script.fromASM(tokenLockingScript),
+      satoshis: holderSatoshi
     }))
 
-    return getPreimage(tx_, token.lockingScript.toASM(), inputSatoshis)
+
+    console.log(tx_)
+
+    // 设置校验环境 set txContext for verification
+    token.txContext = {
+      tx: tx_,
+      inputIndex:0,
+      inputSatoshis: holderSatoshi
+    }
+
+    //交易准备完成，创建preimage
+    preimage = getPreimage(tx_, token.lockingScript.toASM(), holderSatoshi, 0, sighashType)
+    // console.log(preimage.slice(68,104).toString('hex'))
+
+    //构造发行商签名
+    const sig = signTx(tx_, issuerPrivKey, token.lockingScript.toASM(), holderSatoshi, 0, sighashType)
+
+    const initiateFn = token.initiate(new Sig(toHex(sig)), new Ripemd160(toHex(ownerPKH)), new Ripemd160(toHex(issuerPKH)), 100000, new Bytes(toHex(preimage)))
+    //console.log(initiateFn)
+    const result = initiateFn.verify()
+    console.log(result)
+
+    assert.isTrue(result.success, result.error);
+
 
     //
     // tx_.addInput(new bsv.Transaction.Input({
