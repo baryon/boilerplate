@@ -128,6 +128,7 @@ function compileContract(fileName) {
     console.log(result.errors);
     throw result.errors;
   }
+  console.log(`Compiling Finished ${filePath} ...`);
 
   return result;
 }

@@ -18,8 +18,8 @@ contract Token {
 
       public function initiate(Sig issuerSig, Ripemd160 ownerPKH, Ripemd160 changePKH, int changeSatoshi, bytes txPreimage, int outValue) {
         // this ensures the preimage is for the current tx
-        //SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
-        SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
+        SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
+        //SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
         require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
         // authorize
         require(checkSig(issuerSig,  this.issuerPubKey));
@@ -35,35 +35,37 @@ contract Token {
 
         int supplyStart = scriptLen - 8;
         int decimalsStart = supplyStart - 1;
-        int ruleStart = decimalsStart - 1;
-        int issuerStart = ruleStart - 64;
-        int symbolStart = issuerStart - 16;
-        int nameStart = symbolStart - 64;
+        // int ruleStart = decimalsStart - 1;
+        // int issuerStart = ruleStart - 64;
+        // int symbolStart = issuerStart - 16;
+        // int nameStart = symbolStart - 64;
 
         bytes initialSupply = lockingScript[supplyStart : ];
 
-        bytes lockingScriptBody = lockingScript[ : nameStart];
+        int supply = unpack(initialSupply) + 1;
+
+        bytes lockingScriptBody = lockingScript[ : decimalsStart];
 
         bytes valueBytes = num2bin(outValue, Util.OutputValueLen);
 
         // write Token UTXO locking script
         // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
-        bytes tokenData = contractId + prevOutpoint + ownerPKH + initialSupply;
+        bytes tokenData = num2bin(supply, Util.OutputValueLen);
+        //initialSupply; 
+        //contractId + prevOutpoint + ownerPKH + initialSupply;
         bytes tokenLockingScript = lockingScriptBody + tokenData; 
-        bytes output0 = valueBytes + Util.writeVarint(tokenLockingScript);
+        bytes output = valueBytes + Util.writeVarint(tokenLockingScript);
 
-        // write Baton UTXO locking script
-        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 76bytes
-        bytes batonData = contractId + prevOutpoint + initialSupply;
-        bytes batonLockingScript = lockingScriptBody + batonData;
-        bytes output1 = valueBytes + Util.writeVarint(batonLockingScript);
+        // // write Baton UTXO locking script
+        // // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 76bytes
+        // bytes batonData = contractId + prevOutpoint + initialSupply;
+        // bytes batonLockingScript = lockingScriptBody + batonData;
+        // output = output + valueBytes + Util.writeVarint(batonLockingScript);
 
-     		// Expect the notify output
-        bytes notifyScript = Util.buildPublicKeyHashScript(ownerPKH);
-        bytes output2 = this.notifySatoshiBytes() + Util.writeVarint(notifyScript);
+     		// // Expect the notify output
+        // bytes notifyScript = Util.buildPublicKeyHashScript(ownerPKH);
+        // output = output + this.notifySatoshiBytes() + Util.writeVarint(notifyScript);
 
-        bytes output = output0 + output1 + output2;
-        
         if(changeSatoshi != 0 ) {
             // the change output
             bytes changeScript = Util.buildPublicKeyHashScript(changePKH);

@@ -25,6 +25,7 @@ describe('Test sCrypt contract TokenSale In Javascript', () => {
     tokenSale.dataLoad = ''
 
     getPreimageAfterPurchase = (publicKey) => {
+      console.log(tokenSale.codePart.toASM())
       const newLockingScriptHex = tokenSale.lockingScript.toHex() + toHex(publicKey) + num2bin(numTokens, DataLen)
       tx_.addOutput(new bsv.Transaction.Output({
         script: bsv.Script.fromHex(newLockingScriptHex),

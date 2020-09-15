@@ -1,3 +1,8 @@
+const axios = require( 'axios' );
+const API_PREFIX = 'https://api.whatsonchain.com/v1/bsv/test'
+const minFee = 546
+const { assert } = require('chai');
+
 const {
   bsv,
   buildContractClass,
@@ -7,174 +12,263 @@ const {
   Bytes,
   signTx,
   PubKey,
-  Sig
+  Sig,
+  Ripemd160
 } = require( 'scryptlib' );
+
+
+
 const {
   DataLen,
   loadDesc,
   createLockingTx,
-  sendTx,
   reverseEndian,
   showError,
   string2Hex,
   hex2String,
+  unlockP2PKHInput
 } = require( '../helper' );
 const {
   privateKey
 } = require( '../privateKey' );
 
+async function sendTx ( tx ) {
+  return axios.post( `${API_PREFIX}/tx/raw`, {
+    txhex: tx.serialize()
+  } ).then( res => {
+    return res.data
+  } ).catch( e => {
+    throw `${tx.hash} ${e.message}  ${e.response.data}`
+  } )
+}
+
 ( async () => {
-  const privateKey1 = new bsv.PrivateKey.fromRandom( 'testnet' )
-  const publicKey1 = bsv.PublicKey.fromPrivateKey( privateKey1 )
-  const privateKey2 = new bsv.PrivateKey.fromRandom( 'testnet' )
-  const publicKey2 = bsv.PublicKey.fromPrivateKey( privateKey2 )
-  const privateKey3 = new bsv.PrivateKey.fromRandom( 'testnet' )
-  const publicKey3 = bsv.PublicKey.fromPrivateKey( privateKey3 )
+  // private keys of buyers - on testnet in WIF
+  const key1 = 'cUUk8fqcS8TxVt3dXDjP8pKwD6irUB5V2ebCF7UVJfW3i3kXiBjs'//'mxv7C9BaV1LGkmKNZBdDnut99z23xp6mMD'
+  const key2 = 'cTBnbZst1xVysfmLvNWFKYP12Ri29osvZ7AuWPScatUcLy8kH7j1'//'muvRot22uEmcTLe3UudCz4nnnRi5tMF675'
+  const key3 = 'cT9RMrxRDdZduB89BEowkTEXDF9QA612NRZiCQrZwQLeju8fv8E7'//myyZ5dBL9X7YBmnJLKDhxYteRwbcpqtUYu
+  const key4 = 'cTvyRutPvYKtj39eEkRMAXBsHAY3CkdKjrHmYt3PtcNjrhb8qm1X'//mwicTqgWNoHcm2wKfj7aoWftjWmCqLnaa6
+  const key5 = 'cPjPZNvnT4a2xzuYtQsqNNTtw47ERQ97SHLohmHuEoQd36t7Fn5q'//mjL6VF6VpGUHQ6jNhqnJtC6SjEHXTNP9p4
+  if ( !key1 || !key2 || !key3 || !key4 || !key5 ) {
+    console.log( 'You must provide private keys to purchase tokens' )
+    genPrivKey()
+  }
+
+  const issuerPubKey = privateKey.publicKey
+  const issuerPKH = bsv.crypto.Hash.sha256ripemd160( issuerPubKey.toBuffer() )
+
+  const privateKeys = [ key1, key2, key3, key4, key5 ].map( k => new bsv.PrivateKey.fromWIF( k ) )
+  const publicKeys = new Array( privateKeys.length )
+  // PKHs for receiving change from each transaction (20 bytes - 40 hexadecimal characters)
+  const pkhs = new Array( privateKeys.length )
+
+  // generate public keys, and PKHs
+  for ( k = 0; k < privateKeys.length; k++ ) {
+    publicKeys[ k ] = bsv.PublicKey.fromPrivateKey( privateKeys[ k ] )
+    pkhs[ k ] = bsv.crypto.Hash.sha256ripemd160( publicKeys[ k ].toBuffer() )
+  }
+
+  //签名类型 ALL
+  const Signature = bsv.crypto.Signature
+  // //const sighashType = Signature.SIGHASH_ANYONECANPAY | Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+  const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+
+
+  const ownerAddress = publicKeys[ 0 ].toAddress()
+  const ownerPKH = pkhs[ 0 ]
 
   try {
     const Token = buildContractClass( loadDesc( 'improvedTokenUtxo_desc.json' ) )
 
-    //计算需要多少satoshi才能避免被当成dust
-    //根据节点代码所示，dust的计算是输入(148+输出的大小)*最小重放手续费*3
-    //手续费，我们设置为0.5， 只要最后除以2
-    //标准手续费为1，所有节点都会接收
-    //普通收费可以设置为0.5
-    //一些矿池可以接受0.25
-    //但存在一个问题就是，如果以后费率有波动，更高或者更低
-    // function calcHolderSatoshi () {
-    //   //创建一个Dummy Token
-    //   const token = new Token( new PubKey( toHex( issuerPubKey ) ), 0, 0 )
-    //   //根据Dummy Token的脚本长度，计算holderSatoshi
-    //   holderSatoshi = (148 + token.codePart.toHex().length / 2) * 3 / 2
-    //   console.log( holderSatoshi )
-    //   return holderSatoshi
-    // }
-
-    //Token增发无限制
-    const maxSupply = 0
-    const token = new Token(new PubKey(toHex(issuerPubKey)), maxSupply, holderSatoshi)
+    //Token不能增发
+    const maxSupply = 1024
+    const issuerPubKey = privateKey.publicKey
+    const token = new Token( new PubKey( toHex( issuerPubKey ) ), maxSupply )
     //console.log(token)
     //设置初始化状态
     // name(64bytes) + symbol(16bytes) + issuer(64bytes) + rule(1byte) + decimals(1byte) + initialSupply(8bytes)   = 158bytes
     const name = "Test Fungible Token"
     const symbol = "TFT"
     const issuer = "ChainBow Co. Ltd."
-    // const holderSatoshi = calcHolderSatoshi()
     const rule = 0
     const decimals = 0
     const initialSupply = 1024
-    const dataLoad =  string2Hex(name, 64) + string2Hex(symbol, 16) + string2Hex(issuer, 64) + num2bin(rule, 1) + num2bin(decimals, 1) + num2bin(initialSupply, 8)
-    
+    const dataLoad = num2bin( decimals, 1 ) + num2bin( initialSupply, 8 )
+    //string2Hex( name, 64 ) + string2Hex( symbol, 16 ) + string2Hex( issuer, 64 ) + num2bin( rule, 1 ) + num2bin( decimals, 1 ) + num2bin( initialSupply, 8 )
+    //设置Token的初始状态
     token.dataLoad = dataLoad
 
+    //Token的ASM代码
+    console.log( token.lockingScript.toASM() )
+    //console.log(token.lockingScript.toHex())
 
-    let inputSatoshis = 10000
-    const FEE = inputSatoshis / 4
-    let outputAmount = Math.floor( ( inputSatoshis - FEE ) / 2 )
 
-    // lock fund to the script
-    const lockingTx = await createLockingTx( privateKey.toAddress(), inputSatoshis, FEE )
-    lockingTx.outputs[ 0 ].setScript( token.lockingScript )
-    lockingTx.sign( privateKey )
-    let lockingTxid = await sendTx( lockingTx )
-    console.log( 'funding txid:      ', lockingTxid )
+    const holderSatoshi = 546//Math.floor( ( 148 + token.lockingScript.toHex().length / 2 ) * 0.1 )
 
-    // split one UTXO of 100 tokens into one with 70 tokens and one with 30
-    let splitTxid, lockingScript0, lockingScript1
-    {
-      const tx = new bsv.Transaction()
-      tx.addInput( new bsv.Transaction.Input( {
-        prevTxId: lockingTxid,
-        outputIndex: 0,
-        script: ''
-      } ), token.lockingScript, inputSatoshis )
+    console.log( holderSatoshi )
 
-      lockingScript0 = token.codePart.toASM() + ' OP_RETURN ' + toHex( publicKey2 ) + num2bin( 0, DataLen ) + num2bin( 70, DataLen )
-      tx.addOutput( new bsv.Transaction.Output( {
-        script: bsv.Script.fromASM( lockingScript0 ),
-        satoshis: outputAmount
-      } ) )
-      lockingScript1 = token.codePart.toASM() + ' OP_RETURN ' + toHex( publicKey3 ) + num2bin( 0, DataLen ) + num2bin( 30, DataLen )
-      tx.addOutput( new bsv.Transaction.Output( {
-        script: bsv.Script.fromASM( lockingScript1 ),
-        satoshis: outputAmount
-      } ) )
+    const address = privateKey.toAddress()
+    //获取UTXO
+    // step 1: fetch utxos
+    let {
+      data: utxos
+    } = await axios.get( `${API_PREFIX}/address/${address}/unspent` )
 
-      const preimage = getPreimage( tx, token.lockingScript.toASM(), inputSatoshis )
-      const sig1 = signTx( tx, privateKey1, token.lockingScript.toASM(), inputSatoshis )
-      const unlockingScript = token.split(
-        new Sig( toHex( sig1 ) ),
-        new PubKey( toHex( publicKey2 ) ),
-        70,
-        outputAmount,
-        new PubKey( toHex( publicKey3 ) ),
-        30,
-        outputAmount,
-        new Bytes( toHex( preimage ) )
-      ).toScript()
-      tx.inputs[ 0 ].setScript( unlockingScript );
-      splitTxid = await sendTx( tx );
-      console.log( 'split txid:       ', splitTxid )
+    utxos = utxos.map( ( utxo ) => ( {
+      txId: utxo.tx_hash,
+      outputIndex: utxo.tx_pos,
+      satoshis: utxo.value,
+      script: bsv.Script.buildPublicKeyHashOut( address ).toHex(),
+    } ) )
+
+    console.log( utxos )
+
+    //构建第一个交易
+
+    //从P2PKH创建一个非标输出
+    const tx0 = new bsv.Transaction().from( utxos )
+    //非标输出，0
+    tx0.addOutput( new bsv.Transaction.Output( {
+      script: token.lockingScript,
+      satoshis: holderSatoshi,
+    } ) )
+
+    //找零P2PKH输出1
+    tx0.change( address )
+
+    //自动计算手续费 .fee( minFee )
+
+    //对交易签名
+    tx0.sign( privateKey )
+    console.log( tx0 )
+
+    const tx0id = tx0.hash
+    console.log( tx0id )
+
+    const utxos1 = {
+      txId: tx0id,
+      outputIndex: 1,
+      satoshis: tx0.outputs[ 1 ].satoshis,
+      script: bsv.Script.buildPublicKeyHashOut( address ).toHex(),
     }
 
-    inputSatoshis = outputAmount
-    outputAmount -= FEE
-    // merge one UTXO with 70 tokens and one with 30 into a single UTXO of 100 tokens
-    {
-      const tx = new bsv.Transaction()
-      tx.addInput( new bsv.Transaction.Input( {
-        prevTxId: splitTxid,
-        outputIndex: 0,
-        script: ''
-      } ), bsv.Script.fromASM( lockingScript0 ), inputSatoshis )
 
-      tx.addInput( new bsv.Transaction.Input( {
-        prevTxId: splitTxid,
-        outputIndex: 1,
-        script: ''
-      } ), bsv.Script.fromASM( lockingScript1 ), inputSatoshis )
 
-      const lockingScript2 = token.codePart.toASM() + ' OP_RETURN ' + toHex( publicKey1 ) + num2bin( 70, DataLen ) + num2bin( 30, DataLen )
-      tx.addOutput( new bsv.Transaction.Output( {
-        script: bsv.Script.fromASM( lockingScript2 ),
-        satoshis: outputAmount
-      } ) )
+    //创建第二个交易，解锁第一个交易的0号输出
+    const tx1 = new bsv.Transaction()//.from(utxos)
 
-      // use reversed txid in outpoint
-      const txHash = reverseEndian( splitTxid )
-      const prevouts = txHash + num2bin( 0, 4 ) + txHash + num2bin( 1, 4 )
 
-      // input 0
-      {
-        const preimage = getPreimage( tx, lockingScript0, inputSatoshis, 0 )
-        const sig2 = signTx( tx, privateKey2, lockingScript0, inputSatoshis, 0 )
-        const unlockingScript = token.merge(
-          new Sig( toHex( sig2 ) ),
-          new PubKey( toHex( publicKey1 ) ),
-          new Bytes( prevouts ), 30, outputAmount,
-          new Bytes( toHex( preimage ) )
-        ).toScript()
-        tx.inputs[ 0 ].setScript( unlockingScript );
-      }
+    const prevLockingScript = token.lockingScript.toASM()
+    console.log(prevLockingScript)
 
-      // input 1
-      {
-        const preimage = getPreimage( tx, lockingScript1, inputSatoshis, 1 )
-        const sig3 = signTx( tx, privateKey3, lockingScript1, inputSatoshis, 1 )
-        const unlockingScript = token.merge(
-          new Sig( toHex( sig3 ) ),
-          new PubKey( toHex( publicKey1 ) ),
-          new Bytes( prevouts ), 70, outputAmount,
-          new Bytes( toHex( preimage ) )
-        ).toScript()
-        tx.inputs[ 1 ].setScript( unlockingScript );
-      }
+    //创世交易
+    tx1.addInput( new bsv.Transaction.Input( {
+      prevTxId: tx0id,
+      outputIndex: 0,
+      script: ''
+    } ), bsv.Script.fromASM(prevLockingScript), holderSatoshi )
 
-      const mergeTxid = await sendTx( tx );
-      console.log( 'merge txid:       ', mergeTxid )
+    //创世交易的找零UTXO
+    tx1.addInput( new bsv.Transaction.Input( {
+      prevTxId: tx0id,
+      outputIndex: 1,
+      script: ''
+    } ), bsv.Script.buildPublicKeyHashOut( address ), tx0.outputs[ 1 ].satoshis )
+
+
+    var writer = new bsv.encoding.BufferWriter()
+    //  outpoint (32-byte hash + 4-byte little endian)
+    writer.writeReverse( Buffer.from( tx0id, 'hex' ) )
+    writer.writeUInt32LE( 0 )
+    writer.toBuffer()
+
+    const prevOutpoint = writer.toBuffer().toString( 'hex' )
+    const contractId = tx0id
+    console.log( contractId, prevOutpoint )
+
+
+    //console.log( token.codePart.toASM() )
+
+    //非标输出，0
+    //创建 UTXO Token LockingScript
+    // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
+    const tokenData = num2bin( 1025, 8 )//contractId //+ prevOutpoint + toHex( ownerPKH ) + num2bin( initialSupply, 8 )
+    const tokenLockingScript = token.codePart.toASM() + ' OP_RETURN ' + tokenData
+    console.log( tokenLockingScript )
+
+    tx1.addOutput( new bsv.Transaction.Output( {
+      script: bsv.Script.fromASM( tokenLockingScript ),
+      satoshis: holderSatoshi,
+    } ) )
+
+
+    //非标输出，1
+    // // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 76bytes
+    // const batonData = contractId + prevOutpoint + num2bin( initialSupply, 8 )
+    // const batonLockingScript = token.codePart.toASM() + ' OP_RETURN ' + batonData
+    // // console.log( batonLockingScript )
+
+    // tx1.addOutput( new bsv.Transaction.Output( {
+    //   script: bsv.Script.fromASM( batonLockingScript ),
+    //   satoshis: holderSatoshi,
+    // } ) )
+
+
+    // //添加通知
+    // tx1.addOutput( new bsv.Transaction.Output( {
+    //   script: bsv.Script.buildPublicKeyHashOut( ownerAddress ),
+    //   satoshis: 546,
+    // } ) )
+
+
+    //找零P2PKH输出1
+    tx1.change( address )
+
+    const changeSatoshi = tx1.outputs[ tx1.outputs.length - 1 ].satoshis //tx1.outputs.length < 4 ? 0 : tx1.outputs[ 3 ].satoshis
+
+    console.log(changeSatoshi)
+
+
+
+    // tx1.change(address).fee(minFee)
+
+    unlockP2PKHInput( privateKey, tx1, 1, sighashType )
+
+    //console.log( tx1 )
+
+    //构造preimage
+    let preimage = getPreimage( tx1, prevLockingScript, holderSatoshi, 0, sighashType )
+    console.log( preimage.length )
+
+
+    assert.equal(prevOutpoint, preimage.slice(68,104).toString('hex'));
+
+    //构造发行商签名
+    const sig = signTx( tx1, privateKey, prevLockingScript, holderSatoshi, 0, sighashType )
+
+    //console.log( new Sig( toHex( sig ) ), new Ripemd160( toHex( ownerPKH ) ), new Ripemd160( toHex( issuerPKH ) ), tx1.outputs[ 1 ].satoshis, new Bytes( toHex( preimage ) ), holderSatoshi )
+
+    const initiateFn = token.initiate( new Sig( toHex( sig ) ), new Ripemd160( toHex( ownerPKH ) ), new Ripemd160( toHex( issuerPKH ) ), changeSatoshi, new Bytes( toHex( preimage ) ), holderSatoshi )
+
+    const unlockingScript = initiateFn.toScript()
+    //console.log( unlockingScript )
+
+    tx1.inputs[ 0 ].setScript( unlockingScript )
+
+
+
+    try {
+
+      tx0.verify()
+      tx1.verify()
+      console.log( 'sending' )
+      console.log( await sendTx( tx0 ) )
+      console.log( await sendTx( tx1 ) )
+
+    } catch ( e ) {
+      console.log( e )
     }
 
-    console.log( 'Succeeded on testnet' )
   } catch ( error ) {
     console.log( 'Failed on testnet' )
     showError( error )
