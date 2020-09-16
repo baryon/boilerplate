@@ -99,40 +99,43 @@ contract Token {
 
         int totalSupplyStart = scriptLen - 8;
         int prevOutpointStart = totalSupplyStart - 36;
+        int contractIdStart = prevOutpointStart - 32;
+        int dataLenStart = contractIdStart - 1;
 
-        bytes lockingScriptBody = lockingScript[: scriptLen - prevOutpointStart];
+        bytes lockingScriptBody = lockingScript[: dataLenStart];
+        bytes contractId = lockingScript[contractIdStart : prevOutpointStart];
 
         int totalSupply = unpack(lockingScript[totalSupplyStart : ]) + supply;
-        require( this.maxSupply == 0 || totalSupply < this.maxSupply );
+        require( this.maxSupply == 0 || totalSupply <= this.maxSupply );
 
         bytes valueBytes = num2bin(outValue, Util.OutputValueLen);
 
         // write Token UTXO locking script
         // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
-        bytes tokenData = lockingScriptBody + prevOutpoint + ownerPKH + num2bin(supply, Util.OutputValueLen);
-        bytes tokenLockingScript = lockingScriptBody + tokenData; 
+        bytes tokenData = contractId + prevOutpoint + ownerPKH + num2bin(supply, Util.OutputValueLen);
+        bytes tokenLockingScript = lockingScriptBody + num2bin(len(tokenData), 1) + tokenData; 
 
         bytes output0 = valueBytes + Util.writeVarint(tokenLockingScript);
 
         // write Baton UTXO locking script
         // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 76bytes
-        bytes batonData = lockingScriptBody + prevOutpoint + num2bin(totalSupply, Util.OutputValueLen);
-        bytes batonLockingScript = lockingScriptBody + batonData;
+        bytes batonData = contractId + prevOutpoint + num2bin(totalSupply, Util.OutputValueLen);
+        bytes batonLockingScript = lockingScriptBody + num2bin(len(batonData), 1) + batonData;
         bytes output1 = valueBytes + Util.writeVarint(batonLockingScript);
 
      		// Expect the notify output
-        bytes notifyScript = Util.buildPublicKeyHashScript(ownerPKH);
-        bytes output2 = this.notifySatoshiBytes() + Util.writeVarint(notifyScript);
+        bytes ownerNotifyScript = Util.buildPublicKeyHashScript(ownerPKH);
+        bytes output2 = this.notifySatoshiBytes() + Util.writeVarint(ownerNotifyScript);
 
-        bytes output = output0 + output1 + output2;
+     		// notify witness output
+        bytes witnessNotifyScript = Util.buildPublicKeyHashScript(this.witnessPKH);
+        bytes output3 = this.notifySatoshiBytes() + Util.writeVarint(witnessNotifyScript);
 
-        if(changeSatoshi != 0 ) {
-            // the change output
-            bytes changeScript = Util.buildPublicKeyHashScript(changePKH);
-            output = output + num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(changeScript);
-        }
+        // the change output
+        bytes output4 = changeSatoshi != 0 ? num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(Util.buildPublicKeyHashScript(changePKH)) : b'';
 
-        require(hash256(output) == Util.hashOutputs(txPreimage));
+		    Sha256 hashOutputs = hash256(output0 + output1 + output2 + output3 + output4);
+        require(hashOutputs == Util.hashOutputs(txPreimage));
       }
 
       // public function punish(bytes txPreimage, bytes prevTx, bytes prevPrevTx) {

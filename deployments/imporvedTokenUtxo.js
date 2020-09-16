@@ -51,10 +51,34 @@ async function sendTx ( txHex ) {
   } )
 }
 
-function analyseGenersisTx ( txHex ) {
-  const tranaction = new bsv.Transaction( txHex )
-  console.log( tranaction )
-  const genesisOutput = tranaction.outputs[ 0 ]
+//构造输出组合
+function buildOutput(txid, outputIndex) {
+  var writer = new bsv.encoding.BufferWriter()
+  //  outpoint (32-byte hash + 4-byte little endian)
+  writer.writeReverse( Buffer.from( txid, 'hex' ) )
+  writer.writeUInt32LE( outputIndex )
+  return writer.toBuffer().toString('hex')
+}
+
+//分割输出组合，获取txid和index
+function splitOutput(outputHex) {
+  const buffer = Buffer.from( outputHex, 'hex' )
+  const txid = buffer.slice( 0, 32 ).reverse().toString('hex')
+  const outputIndex = buffer.slice( 32 ).reverse().toString('hex')
+
+  return {
+    txid,
+    outputIndex
+  }
+
+}
+//分析创世交易的输出
+function analyseGenersisOutput ( genesisOutput ) {
+  // const tranaction = new bsv.Transaction( txHex )
+  // console.log( tranaction )
+  // const genesisOutput = tranaction.outputs[ 0 ]
+
+  // codePart + OP_RETURN + name(64bytes) + symbol(16bytes) + issuer(64bytes) + rule(1byte) + decimals(1byte) + initialSupply(8bytes) = 154bytes
   const lockingScript = Buffer.from( genesisOutput.script.toHex(), 'hex' )
   const scriptLen = lockingScript.length
   const supplyStart = scriptLen - 8;
@@ -63,17 +87,16 @@ function analyseGenersisTx ( txHex ) {
   const issuerStart = ruleStart - 64;
   const symbolStart = issuerStart - 16;
   const nameStart = symbolStart - 64;
-
-  const initialSupply = lockingScript.slice( supplyStart ).readUInt32LE()
-  const decimals = lockingScript.slice( decimalsStart, supplyStart ).reverse().readUInt8()
-  const rule = lockingScript.slice( ruleStart, decimalsStart ).reverse().readUInt8()
-  const issuer = lockingScript.slice( issuerStart, ruleStart ).toString( 'utf8' ).trim()
-  const symbol = lockingScript.slice( symbolStart, issuerStart ).toString( 'utf8' ).trim()
-  const name = lockingScript.slice( nameStart, symbolStart ).toString( 'utf8' ).trim()
-
   const dataLenStart = nameStart - 1
   const pushDataStart = dataLenStart - 1
   const returnStart = pushDataStart - 1
+
+  const initialSupply = lockingScript.slice( supplyStart ).readUInt32LE()
+  const decimals = lockingScript.slice( decimalsStart, supplyStart ).readUInt8()
+  const rule = lockingScript.slice( ruleStart, decimalsStart ).readUInt8()
+  const issuer = lockingScript.slice( issuerStart, ruleStart ).toString( 'utf8' ).trim()
+  const symbol = lockingScript.slice( symbolStart, issuerStart ).toString( 'utf8' ).trim()
+  const name = lockingScript.slice( nameStart, symbolStart ).toString( 'utf8' ).trim()
 
   //删除包括OP RETURN的在内的数据，留下的核心代码
   const codePart = lockingScript.slice( 0, returnStart ).toString( 'hex' )
@@ -97,6 +120,78 @@ function analyseGenersisTx ( txHex ) {
 
 }
 
+//分析Baton UTXO的输出
+function analyseBatonOutput ( batonOutput ) {
+  const lockingScript = Buffer.from( batonOutput.script.toHex(), 'hex' )
+  // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 76bytes
+  const scriptLen = lockingScript.length
+  const totalSupplyStart = scriptLen - 8;
+  const prevOutpointStart = totalSupplyStart - 1;
+  const contractIdStart = prevOutpointStart - 1;
+  const dataLenStart = contractIdStart - 1
+  const pushDataStart = dataLenStart - 1
+  const returnStart = pushDataStart - 1
+
+  const totalSupply = lockingScript.slice( totalSupplyStart ).readUInt32LE()
+  const prevOutpoint = lockingScript.slice( prevOutpointStart, totalSupplyStart ).toString( 'hex' )
+  const contractId = lockingScript.slice( contractIdStart, prevOutpointStart ).toString( 'hex' )
+
+  //删除包括OP RETURN的在内的数据，留下的核心代码
+  const codePart = lockingScript.slice( 0, returnStart ).toString( 'hex' )
+
+  console.log( totalSupply )
+  console.log( prevOutpoint )
+  console.log( contractId )
+
+  return {
+    totalSupply,
+    prevOutpoint,
+    contractId,
+    codePart
+  }
+
+}
+
+//分析Token UTXO的输出
+function analyseTokenOutput ( tokenOutput ) {
+  const lockingScript = Buffer.from( tokenOutput.script.toHex(), 'hex' )
+  // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
+  const scriptLen = lockingScript.length
+  const tokenAmountStart = scriptLen - 8;
+  const ownerPkhStart = tokenAmountStart - 20;
+  const prevOutpointStart = ownerPkhStart - 36;
+  const contractIdStart = prevOutpointStart - 32;
+  const dataLenStart = contractIdStart - 1
+  const pushDataStart = dataLenStart - 1
+  const returnStart = pushDataStart - 1
+
+  const tokenAmount = lockingScript.slice( tokenAmountStart ).readUInt32LE()
+  const ownerPKH = lockingScript.slice( ownerPkhStart, tokenAmountStart ).toString( 'hex' )
+  const prevOutpoint = lockingScript.slice( prevOutpointStart, ownerPKH ).toString( 'hex' )
+  const contractId = lockingScript.slice( contractIdStart, prevOutpointStart ).toString( 'hex' )
+
+  //删除包括OP RETURN的在内的数据，留下的核心代码
+  const codePart = lockingScript.slice( 0, returnStart ).toString( 'hex' )
+
+  console.log( tokenAmount )
+  console.log( ownerPKH )
+  console.log( prevOutpoint )
+  console.log( contractId )
+
+  return {
+    tokenAmount,
+    ownerPKH,
+    prevOutpoint,
+    contractId,
+    codePart
+  }
+
+}
+
+//获取合约代码， 创建合约类
+const Token = buildContractClass( loadDesc( 'improvedTokenUtxo_desc.json' ) )
+
+// 构造创世交易，并且进行首次发行
 async function genesisAndInitiate ( issuerPrivKey, ownerPKH, maxSupply, witnessPKH, data ) {
 
   //发行商的公钥
@@ -107,13 +202,9 @@ async function genesisAndInitiate ( issuerPrivKey, ownerPKH, maxSupply, witnessP
   const Signature = bsv.crypto.Signature
   const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
 
-  //获取合约代码
-  const Token = buildContractClass( loadDesc( 'improvedTokenUtxo_desc.json' ) )
-
-
   //发行商公钥，最大公给量，见证人
   const token = new Token( new PubKey( toHex( issuerPubKey ) ), maxSupply, new Ripemd160( toHex( witnessPKH ) ) )
-  
+
   //设置初始化状态
   // name(64bytes) + symbol(16bytes) + issuer(64bytes) + rule(1byte) + decimals(1byte) + initialSupply(8bytes)   = 158bytes
   const dataLoad = string2Hex( data.name, 64 ) + string2Hex( data.symbol, 16 ) + string2Hex( data.issuer, 64 ) + num2bin( data.rule, 1 ) + num2bin( data.decimals, 1 ) + num2bin( data.initialSupply, 8 )
@@ -155,7 +246,7 @@ async function genesisAndInitiate ( issuerPrivKey, ownerPKH, maxSupply, witnessP
     script: bsv.Script.buildPublicKeyHashOut( issuerAddress ).toHex(),
   } ) )
 
-  console.log( utxos )
+  //console.log( utxos )
 
   //构建第一个交易
 
@@ -274,7 +365,7 @@ async function genesisAndInitiate ( issuerPrivKey, ownerPKH, maxSupply, witnessP
 
   tx0.verify()
   tx1.verify()
-  console.log( 'sending' )
+  //console.log( 'sending' )
 
   const genersisTxId = await sendTx( tx0.serialize() )
   const initialSupplyTxId = await sendTx( tx1.serialize() )
@@ -284,6 +375,141 @@ async function genesisAndInitiate ( issuerPrivKey, ownerPKH, maxSupply, witnessP
 }
 
 
+// 从上一个Baton UTXO开始增发
+async function issue ( issuerPrivKey, ownerPKH, supply, witnessPKH, data ) {
+
+  //发行商的公钥
+  const issuerPubKey = issuerPrivKey.publicKey
+  const issuerPKH = bsv.crypto.Hash.sha256ripemd160( issuerPubKey.toBuffer() )
+
+  //签名类型 ALL
+  const Signature = bsv.crypto.Signature
+  const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
+
+  //发行商公钥，最大公给量，见证人
+  const token = new Token( new PubKey( toHex( issuerPubKey ) ), maxSupply, new Ripemd160( toHex( witnessPKH ) ) )
+
+  //设置初始化状态
+  //contractId + prevOutpoint + num2bin( data.initialSupply, 8 )
+  const dataLoad = data.contractId + data.prevOutpoint + num2bin( data.totalSupply, 8 )
+  token.dataLoad = dataLoad
+
+  //核心代码，后面没有OP_RETURN
+  const coreLockingScript = token.codePart.toASM()
+
+  //前交易锁定代码，带有OP_RETURN以及后面的数据
+  //完全的HEX拼接
+  const lockingBodyScript = coreLockingScript + ' OP_RETURN'
+
+  const lockingScript = token.lockingScript.toASM()
+
+  //每个UTXO的持有费用
+  const holderSatoshi = 546//Math.floor( ( 148 + token.lockingScript.toHex().length / 2 ) * 0.1 )
+
+
+  const issuerAddress = issuerPubKey.toAddress()
+  //获取发行商的UTXO
+
+  //最少需要的UTXO价值，低于此数字无法发行
+  //TODO: 需要更精确的数字，通过minReplyFee计算出来，要考虑整体交易的大小
+  const minAmount = 300000;
+
+  //TODO:需要考虑发行商多个地址的情况
+  let utxos = await fetchUtxo( issuerAddress, minAmount )
+  utxos = utxos.map( ( utxo ) => ( {
+    txId: utxo.tx_hash,
+    outputIndex: utxo.tx_pos,
+    satoshis: utxo.value,
+    script: bsv.Script.buildPublicKeyHashOut( issuerAddress ).toHex(),
+  } ) )
+
+  //创建第二个交易，解锁第一个交易的0号输出
+  const tx = new bsv.Transaction()
+
+  const prevLockingScript = lockingScript
+
+  //前一个Baton UTXO
+  tx1.addInput( new bsv.Transaction.Input( {
+    prevTxId: tx0id,
+    outputIndex: 0,
+    script: ''
+  } ), bsv.Script.fromASM( prevLockingScript ), holderSatoshi )
+
+  //TODO: 其他P2PKH UTXO
+  // tx1.addInput( new bsv.Transaction.Input( {
+  //   prevTxId: tx0id,
+  //   outputIndex: 1,
+  //   script: ''
+  // } ), bsv.Script.buildPublicKeyHashOut( issuerAddress ), tx0.outputs[ 1 ].satoshis )
+
+
+  //非标输出，0
+  //创建 UTXO Token LockingScript
+  // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
+  const tokenData = contractId + prevOutpoint + toHex( ownerPKH ) + num2bin( supply, 8 )
+  const tokenLockingScript = lockingBodyScript + ' ' + tokenData
+
+  tx1.addOutput( new bsv.Transaction.Output( {
+    script: bsv.Script.fromASM( tokenLockingScript ),
+    satoshis: holderSatoshi,
+  } ) )
+
+  //非标输出，1
+  // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 76bytes
+  const batonData = contractId + prevOutpoint + num2bin( supply + data.totalSupply, 8 )
+  const batonLockingScript = lockingBodyScript + ' ' + batonData
+
+  tx.addOutput( new bsv.Transaction.Output( {
+    script: bsv.Script.fromASM( batonLockingScript ),
+    satoshis: holderSatoshi,
+  } ) )
+
+
+  //添加通知, 通知用户
+  const ownerAddress = bsv.Address.fromPublicKeyHash( ownerPKH, NETWORK ).toString()
+  tx.addOutput( new bsv.Transaction.Output( {
+    script: bsv.Script.buildPublicKeyHashOut( ownerAddress ),
+    satoshis: 546,
+  } ) )
+
+  //添加通知, 通知全网见证人
+  const witnessAddress = bsv.Address.fromPublicKeyHash( witnessPKH, NETWORK ).toString()
+  tx.addOutput( new bsv.Transaction.Output( {
+    script: bsv.Script.buildPublicKeyHashOut( witnessAddress ),
+    satoshis: 546,
+  } ) )
+
+
+  //找零P2PKH输出1
+  tx.change( issuerAddress )
+
+  const changeSatoshi = tx1.outputs[ tx.outputs.length - 1 ].satoshis
+
+  unlockP2PKHInput( issuerPrivKey, tx, 1, sighashType )
+
+  //构造preimage
+  let preimage = getPreimage( tx, prevLockingScript, holderSatoshi, 0, sighashType )
+
+  //构造发行商签名，只有签名同创世交易的发行商公钥一致才可以首次发行
+  const sig = signTx( tx, issuerPrivKey, prevLockingScript, holderSatoshi, 0, sighashType )
+
+  const issueFn = token.issue( new Sig( toHex( sig ) ), new Ripemd160( toHex( ownerPKH ) ), supply, new Ripemd160( toHex( issuerPKH ) ), changeSatoshi, new Bytes( toHex( preimage ) ), holderSatoshi )
+
+  const unlockingScript = issueFn.toScript()
+  //console.log( unlockingScript )
+
+  //设置第一个输入的解锁脚本，调用锁定代码里的initiate函数
+  tx.inputs[ 0 ].setScript( unlockingScript )
+
+
+  tx.verify()
+  //console.log( 'sending' )
+
+  const issuerTxId = await sendTx( tx.serialize() )
+
+  return { issuerTxId }
+
+}
 
 
 async function main () {
@@ -339,6 +565,24 @@ async function main () {
     const { genersisTxId, initialSupplyTxId } = await genesisAndInitiate( issuerPrivKey, ownerPKH, maxSupply, witnessPKH, data )
 
     console.log( genersisTxId, initialSupplyTxId )
+
+    //合约Id为创世交易的id
+    const contractId = genersisTxId
+
+    //Token UTXO output
+    const tokenOutput = buildOutput(initialSupplyTxId, 0)
+    //Token UTXO output
+    const batonOutput = buildOutput(initialSupplyTxId, 1)
+
+    console.log(contractId, tokenOutput, batonOutput)
+
+    //TODO: 获取Baton UTXO，进行增发
+
+
+    //TODO: 获取Token UTXO，进行转账
+
+
+    //TODO: 获取Token UTXO，进行销毁
 
   } catch ( e ) {
     console.log( e )
