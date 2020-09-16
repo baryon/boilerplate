@@ -22,7 +22,7 @@ describe('Test sCrypt contract TokenSale In Javascript', () => {
     console.log(tokenSale)
 
     // initial empty state
-    tokenSale.dataLoad = ''
+    tokenSale.dataLoad = num2bin(1024, 8)
 
     getPreimageAfterPurchase = (publicKey) => {
       console.log(tokenSale.codePart.toASM())

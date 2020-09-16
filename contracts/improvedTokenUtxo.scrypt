@@ -6,10 +6,12 @@ import "util.scrypt";
 contract Token {
       PubKey issuerPubKey;
       int maxSupply;
+      Ripemd160 witnessPKH;
 
-      constructor(PubKey issuerPubKey, int maxSupply) {
+      constructor(PubKey issuerPubKey, int maxSupply, Ripemd160 witnessPKH) {
           this.issuerPubKey = issuerPubKey;
           this.maxSupply = maxSupply;
+          this.witnessPKH = witnessPKH;
       }
 
       function notifySatoshiBytes(): bytes {
@@ -19,14 +21,13 @@ contract Token {
       public function initiate(Sig issuerSig, Ripemd160 ownerPKH, Ripemd160 changePKH, int changeSatoshi, bytes txPreimage, int outValue) {
         // this ensures the preimage is for the current tx
         SigHashType sigHashType = SigHash.ALL | SigHash.FORKID;
-        //SigHashType sigHashType = SigHash.ANYONECANPAY | SigHash.ALL | SigHash.FORKID;
         require(Util.checkPreimageSigHashType(txPreimage, sigHashType));
         // authorize
         require(checkSig(issuerSig,  this.issuerPubKey));
         
         //outpoint (32-byte hash + 4-byte little endian)
         bytes prevOutpoint = Util.outpoint(txPreimage);
-        bytes contractId = prevOutpoint[ : 32];
+        bytes contractId = reverseBytes32(prevOutpoint[ : 32]);
  
         // read genesis locking script: 
         // codePart + OP_RETURN + name(64bytes) + symbol(16bytes) + issuer(64bytes) + rule(1byte) + decimals(1byte) + initialSupply(8bytes) = 154bytes
@@ -40,36 +41,40 @@ contract Token {
         int symbolStart = issuerStart - 16;
         int nameStart = symbolStart - 64;
 
+        int dataLenStart = nameStart - 1;
+
         bytes initialSupply = lockingScript[supplyStart : ];
 
-        int supply = unpack(initialSupply) + 1;
-
-        bytes lockingScriptBody = lockingScript[ : supplyStart];
+        bytes lockingScriptBody = lockingScript[ : dataLenStart ];
 
         bytes valueBytes = num2bin(outValue, Util.OutputValueLen);
 
         // write Token UTXO locking script
         // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + ownerPkh(20bytes) + tokenAmount(8bytes) = 96bytes
-        bytes tokenData = contractId + initialSupply;
-        //contractId + prevOutpoint + ownerPKH + initialSupply;
-        bytes tokenLockingScript = lockingScriptBody + tokenData; 
+        //bytes tokenData = initialSupply + initialSupply;
+        bytes tokenData = contractId + prevOutpoint + ownerPKH + initialSupply;
+        bytes tokenLockingScript = lockingScriptBody + num2bin(len(tokenData), 1) + tokenData; 
         bytes output0 = valueBytes + Util.writeVarint(tokenLockingScript);
 
-        // // write Baton UTXO locking script
-        // // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 76bytes
-        // bytes batonData = contractId + prevOutpoint + initialSupply;
-        // //bytes batonData = initialSupply;
-        // bytes batonLockingScript = lockingScriptBody + batonData;
-        // bytes output1 = valueBytes + Util.writeVarint(batonLockingScript);
+        // write Baton UTXO locking script
+        // codePart + OP_RETURN + contractId(32bytes) + prevOutpoint(36bytes) + totalSupply(8bytes) = 76bytes
+        bytes batonData = contractId + prevOutpoint + initialSupply;
+        //bytes batonData = initialSupply;
+        bytes batonLockingScript = lockingScriptBody + num2bin(len(batonData), 1) + batonData;
+        bytes output1 = valueBytes + Util.writeVarint(batonLockingScript);
 
-     		// // Expect the notify output
-        // bytes notifyScript = Util.buildPublicKeyHashScript(ownerPKH);
-        // bytes output2 = this.notifySatoshiBytes() + Util.writeVarint(notifyScript);
+     		// notify owner output
+        bytes ownerNotifyScript = Util.buildPublicKeyHashScript(ownerPKH);
+        bytes output2 = this.notifySatoshiBytes() + Util.writeVarint(ownerNotifyScript);
+
+     		// notify witness output
+        bytes witnessNotifyScript = Util.buildPublicKeyHashScript(this.witnessPKH);
+        bytes output3 = this.notifySatoshiBytes() + Util.writeVarint(witnessNotifyScript);
 
         // the change output
-        bytes output3 = changeSatoshi != 0 ? num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(Util.buildPublicKeyHashScript(changePKH)) : b'';
+        bytes output4 = changeSatoshi != 0 ? num2bin(changeSatoshi, Util.OutputValueLen) + Util.writeVarint(Util.buildPublicKeyHashScript(changePKH)) : b'';
 
-		    Sha256 hashOutputs = hash256(output0 + output3);
+		    Sha256 hashOutputs = hash256(output0 + output1 + output2 + output3 + output4);
         require(hashOutputs == Util.hashOutputs(txPreimage));
       }
 
