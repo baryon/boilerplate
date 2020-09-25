@@ -52,19 +52,19 @@ async function sendTx ( txHex ) {
 }
 
 //构造输出组合
-function buildOutput(txid, outputIndex) {
+function buildOutput ( txid, outputIndex ) {
   var writer = new bsv.encoding.BufferWriter()
   //  outpoint (32-byte hash + 4-byte little endian)
   writer.writeReverse( Buffer.from( txid, 'hex' ) )
   writer.writeUInt32LE( outputIndex )
-  return writer.toBuffer().toString('hex')
+  return writer.toBuffer().toString( 'hex' )
 }
 
 //分割输出组合，获取txid和index
-function splitOutput(outputHex) {
+function splitOutput ( outputHex ) {
   const buffer = Buffer.from( outputHex, 'hex' )
-  const txid = buffer.slice( 0, 32 ).reverse().toString('hex')
-  const outputIndex = buffer.slice( 32 ).reverse().toString('hex')
+  const txid = buffer.slice( 0, 32 ).reverse().toString( 'hex' )
+  const outputIndex = buffer.slice( 32 ).reverse().toString( 'hex' )
 
   return {
     txid,
@@ -386,7 +386,7 @@ async function issue ( issuerPrivKey, ownerPKH, supply, witnessPKH, data ) {
   const Signature = bsv.crypto.Signature
   const sighashType = Signature.SIGHASH_ALL | Signature.SIGHASH_FORKID
 
-  //发行商公钥，最大公给量，见证人
+  //发行商公钥，最大供给量，见证人
   const token = new Token( new PubKey( toHex( issuerPubKey ) ), maxSupply, new Ripemd160( toHex( witnessPKH ) ) )
 
   //设置初始化状态
@@ -570,11 +570,11 @@ async function main () {
     const contractId = genersisTxId
 
     //Token UTXO output
-    const tokenOutput = buildOutput(initialSupplyTxId, 0)
+    const tokenOutput = buildOutput( initialSupplyTxId, 0 )
     //Token UTXO output
-    const batonOutput = buildOutput(initialSupplyTxId, 1)
+    const batonOutput = buildOutput( initialSupplyTxId, 1 )
 
-    console.log(contractId, tokenOutput, batonOutput)
+    console.log( contractId, tokenOutput, batonOutput )
 
     //TODO: 获取Baton UTXO，进行增发
 

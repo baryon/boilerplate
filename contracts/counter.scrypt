@@ -23,10 +23,10 @@ contract Counter {
     //获取新的output，这个output是一个sha256(sha256(b))，真对的是输出，包括输出的satoshi和输出的脚本
     //OutputValueLen等于8，就是新输出satoshi的数量站8个字节， UInt64LE类型
     //这里全部假设输入和输出都只有一个
-    Sha256 hashOutputs = hash256(num2bin(amount, Util.OutputValueLen) + Util.writeVarint(scriptCode_));
+ 		bytes output = Util.buildOutput(scriptCode_, amount);
     // ensure output is expected: amount is same with specified
     // also output script is the same with scriptCode except counter incremented
     //判断新的hashOutputs是否同原像中的hashOutputs一致，就可以确认新的输出符合原锁定脚本的规定
-    require(hashOutputs == Util.hashOutputs(txPreimage));
+		require(hash256(output) == Util.hashOutputs(txPreimage));
   }
 }
