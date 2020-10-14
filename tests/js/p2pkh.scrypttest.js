@@ -77,12 +77,13 @@ describe('Test sCrypt contract DemoP2PKH In Javascript', () => {
     //解锁脚本填入前一步的签名和公钥，测试解锁，返回应给为真
     result = demo.unlock(new Sig(toHex(sig)), new PubKey(toHex(publicKey))).verify( { tx, inputSatoshis, inputIndex } )
     expect(result.success, result.error).to.be.true
-
-    //  * print out parameters used in debugger, see ""../.vscode/launch.json" for an example
-    console.log('pkh',toHex(pkh))
-    console.log('sig',toHex(sig))
-    console.log('publicKey',toHex(publicKey))
-    console.log('tx',tx.uncheckedSerialize())
+    /*
+     * print out parameters used in debugger, see ""../.vscode/launch.json" for an example
+      console.log(toHex(pkh))
+      console.log(toHex(sig))
+      console.log(toHex(publicKey))
+      console.log(tx.toString())
+    */
   });
 
   it('signature check should fail when wrong private key signs', () => {

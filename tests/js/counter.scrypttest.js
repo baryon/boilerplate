@@ -1,5 +1,5 @@
 const { expect } = require('chai');
-const { bsv, buildContractClass, getPreimage, toHex, num2bin, Bytes } = require('scryptlib');
+const { bsv, buildContractClass, getPreimage, toHex, num2bin, SigHashPreimage } = require('scryptlib');
 
 const {
   inputIndex,
@@ -26,10 +26,7 @@ describe('Test sCrypt contract Counter In Javascript', () => {
     console.log(counter.lockingScript.toASM())
 
     // set initial OP_RETURN value
-    //设置了初始的值为0，counter.dataLoad相当于在合约末尾添加了 OP_RETURN 00
-    counter.dataLoad = num2bin(0, DataLen)
-    //再次获取锁定脚本，同25行多了一个 OP_RETURN 00
-    console.log(counter.lockingScript.toASM())
+    counter.setDataPart(num2bin(0, DataLen))
 
     //构造新的输出脚本
     //在锁定脚本后面加上了 OP_RETURN 01
@@ -57,22 +54,17 @@ describe('Test sCrypt contract Counter In Javascript', () => {
   });
 
   it('should succeed when pushing right preimage & amount', () => {
-    //输入原像和saotoshi
-    incrementFn = counter.increment(new Bytes(toHex(preimage)), outputAmount)
-    console.log(incrementFn)
-    console.log(incrementFn.unlockingScript.toASM())
-    result = incrementFn.verify()
-    console.log(result)
+    result = counter.increment(new SigHashPreimage(toHex(preimage)), outputAmount).verify()
     expect(result.success, result.error).to.be.true
   });
 
   it('should fail when pushing wrong preimage', () => {
-    result = counter.increment(new Bytes(toHex(preimage) + '01'), outputAmount).verify()
+    result = counter.increment(new SigHashPreimage(toHex(preimage) + '01'), outputAmount).verify()
     expect(result.success, result.error).to.be.false
   });
 
   it('should fail when pushing wrong amount', () => {
-    result = counter.increment(new Bytes(toHex(preimage)), outputAmount - 1).verify()
+    result = counter.increment(new SigHashPreimage(toHex(preimage)), outputAmount - 1).verify()
     expect(result.success, result.error).to.be.false
   });
 });

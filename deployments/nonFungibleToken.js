@@ -4,7 +4,7 @@ const {
   getPreimage,
   toHex,
   num2bin,
-  Bytes,
+  SigHashPreimage,
   signTx,
   PubKey,
   Sig
@@ -36,7 +36,7 @@ const {
     const uniqTokenId = 1;
 
     // append state as passive data part, initial uniqTokenId
-    token.dataLoad = num2bin(uniqTokenId, DataLen) + toHex(publicKeyIssuer)
+    token.setDataPart(num2bin(uniqTokenId, DataLen) + toHex(publicKeyIssuer))
 
     let inputSatoshis = 10000
     const FEE = inputSatoshis / 4
@@ -79,7 +79,7 @@ const {
         new Sig(toHex(sig1)),
         new PubKey(toHex(publicKeyReceiver1)),
         outputSatoshis, outputSatoshis,
-        new Bytes(toHex(preimage))
+        new SigHashPreimage(toHex(preimage))
       ).toScript()
       tx.inputs[0].setScript(unlockingScript);
       issueTxid = await sendTx(tx);
@@ -110,7 +110,7 @@ const {
       const preimage = getPreimage(tx, lockingScript1, inputSatoshis, 0)
       const sig2 = signTx(tx, privateKeyReceiver1, lockingScript1, inputSatoshis, 0)
       const unlockingScript = token.transfer(
-        new Sig(toHex(sig2)), new PubKey(toHex(publicKeyReceiver2)), outputSatoshis, new Bytes(toHex(preimage))
+        new Sig(toHex(sig2)), new PubKey(toHex(publicKeyReceiver2)), outputSatoshis, new SigHashPreimage(toHex(preimage))
       ).toScript()
       tx.inputs[0].setScript(unlockingScript);
       const transferTxid = await sendTx(tx);
