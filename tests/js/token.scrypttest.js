@@ -17,16 +17,13 @@ describe('Test sCrypt contract Token In Javascript', () => {
   
   before(() => {
     const Token = buildContractClass(compileContract('token.scrypt'))
-    console.log(Token)
     token = new Token()
-    console.log(token)
+
     // initial supply 100 tokens: publicKey1 has 100, publicKey2 0
     token.setDataPart(toHex(publicKey1) + num2bin(100, DataLen) + toHex(publicKey2) + num2bin(0, DataLen))
     
     getPreimageAfterTransfer = (balance1, balance2) => {
-      const newLockingScript = token.codePart.toASM() + ' OP_RETURN ' + toHex(publicKey1) + num2bin(balance1, DataLen) + toHex(publicKey2) + num2bin(balance2, DataLen)
-      console.log(newLockingScript)
-
+      const newLockingScript = [token.codePart.toASM(), toHex(publicKey1) + num2bin(balance1, DataLen) + toHex(publicKey2) + num2bin(balance2, DataLen)].join(' ')
       tx_.addOutput(new bsv.Transaction.Output({
         script: bsv.Script.fromASM(newLockingScript),
         satoshis: outputAmount
