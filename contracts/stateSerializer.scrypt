@@ -31,7 +31,8 @@ contract StateSerializer {
 		require(flag);
 
 		// serialize state
-		bytes stateBuf = Writer.writeInt(counter + 1) + Writer.writeBytes(b + b'ff') + Writer.writeBool(!flag);
+    bytes ext = b'0102030405060708090001020304050607080900010203040506070809000102030405060708090001020304050607080900010203040506070809000102030405060708090001020304050607080900';
+		bytes stateBuf = Writer.writeInt(counter + 1) + Writer.writeBytes(b + b'ff') + Writer.writeBool(!flag) + Writer.writeBytes(ext);
 		// serialize state size
 		bytes lenBuf = Writer.writeBytes(Util.encodeStateSize(stateBuf));
 		
