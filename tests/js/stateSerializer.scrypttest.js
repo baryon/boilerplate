@@ -19,20 +19,32 @@ describe('Test sCrypt contract StateSerializer In Javascript', () => {
     const Counter = buildContractClass(compileContract('stateSerializer.scrypt'))
     counter = new Counter()
 
-    // set initial state
-    let state = {'counter': 11, 'bytes': '1234', 'flag': true}
-    counter.setDataPart(state)
+  });
 
-    console.log(counter.lockingScript.toASM())
-    console.log(counter.lockingScript.toHex())
+  it('should succeed when pushing right preimage & amount', () => {
+    // set initial state
+    // let state = {'counter': 11, 'bytes': '1234', 'flag': true}
+    let state =[ 0, -1, 11, '1234', true]
+    counter.setDataPart(state)
+    console.log(counter.dataPart.toASM())
+
+    // console.log(counter.lockingScript.toASM())
+    // console.log(counter.lockingScript.toHex())
     
     // mutate state
-    state.counter++
-    state.bytes += 'ff'
-    state.flag = !state.flag
-    state.ext = '0102030405060708090001020304050607080900010203040506070809000102030405060708090001020304050607080900010203040506070809000102030405060708090001020304050607080900'
+    state[2] = state[2] + 1
+    state[3] = state[3] + 'ff'
+    state[4] = !state[4]
+    state[5] = 'ff'.repeat(2)
 
-    const newLockingScript = [counter.codePart.toASM(), serializeState(state)].join(' ')
+    // state.counter ++
+    // state.bytes += 'ff'
+    // state.flag = !state.flag
+
+    const newSerial = serializeState(state.slice(2))
+    console.log(newSerial)
+
+    const newLockingScript = [counter.codePart.toASM(), newSerial].join(' ')
 
     console.log(newLockingScript)
     console.log(bsv.Script.fromASM(newLockingScript).toHex())
@@ -50,9 +62,7 @@ describe('Test sCrypt contract StateSerializer In Javascript', () => {
       inputIndex,
       inputSatoshis
     }
-  });
 
-  it('should succeed when pushing right preimage & amount', () => {
     result = counter.mutate(new SigHashPreimage(toHex(preimage)), outputAmount).verify()
     expect(result.success, result.error).to.be.true
   });
