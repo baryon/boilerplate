@@ -1,0 +1,31 @@
+contract AccumulatorMultisig {
+  Ripemd160[] pubKeyHashList;
+  int threshold;
+
+  constructor(Ripemd160[] pubKeyHashList, int threshold) {
+    this.pubKeyHashList = pubKeyHashList;
+    this.threshold = threshold;
+  }
+
+  public function unlock(bool[] unlockerList, Sig[] sigList, PubKey[] pubKeyList) {
+    int count = len(unlockerList);
+    require(count == len(this.pubKeyHashList));
+    int i = 0;
+    int j = 0;
+    loop (10) {
+      if (i < count) {
+        bool unlocker = unlockerList[i];
+        if (unlocker) {
+          Sig sig = sigList[j];
+          PubKey pubKey = pubKeyList[j];
+          Ripemd160 pubKeyHash = this.pubKeyHashList[i];
+          require(hash160(pubKey) == pubKeyHash);
+          require(checkSig(sig, pubKey));
+          j = j + 1;
+        }
+      }
+      i = i + 1;
+    }
+    require(j >= this.threshold);
+  }
+}
