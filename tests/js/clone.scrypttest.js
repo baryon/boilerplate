@@ -19,12 +19,9 @@ describe('Test sCrypt contract Clone In Javascript', () => {
 
   it('clone should succeed', () => {
     const Clone = buildContractClass(compileContract('clone.scrypt'))
-
     clone = new Clone()
 
-    clone.setDataPart(num2bin(0, DataLen))
-
-    const newLockingScript = [clone.codePart.toASM(), num2bin(0, DataLen)].join(' ')
+    const newLockingScript = clone.lockingScript.toASM()
 
     tx_.addOutput(new bsv.Transaction.Output({
       script: bsv.Script.fromASM(newLockingScript),
@@ -33,15 +30,9 @@ describe('Test sCrypt contract Clone In Javascript', () => {
 
     preimage = getPreimage(tx_, clone.lockingScript.toASM(), inputSatoshis)
 
-    context = { tx_, inputSatoshis, inputIndex }
-
-    console.log( tx_.toString('hex') )
-
-    // expect(toHex( bsv.Script.fromASM(clone.lockingScript.toASM()).toBuffer())).is.eql(preimage.scriptCode)
-    // console.log(preimage.toJSON())
+    context = { tx: tx_, inputSatoshis, inputIndex }
 
     const unlockFn = clone.unlock(new SigHashPreimage(toHex(preimage)))
-    console.log(unlockFn)
     result = unlockFn.verify(context)
     expect(result.success, result.error).to.be.true
   });
