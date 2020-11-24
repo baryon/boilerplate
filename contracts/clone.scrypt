@@ -1,0 +1,12 @@
+import "util.scrypt";
+
+contract Clone {
+
+  public function unlock(SigHashPreimage txPreimage) {
+    require(Tx.checkPreimage(txPreimage));
+
+    // use redeem script as the new locking script, while maintaining value
+    // bytes output = Util.buildOutput(txPreimage, Util.value(txPreimage));
+    // require(hash256(output) == Util.hashOutputs(txPreimage));
+  }
+}

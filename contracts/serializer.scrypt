@@ -37,14 +37,19 @@ contract Reader {
 			len = Util.fromLEUnsigned(b[this.pos:this.pos+4]);
       this.pos = this.pos + 4;
 			ret = b[this.pos:this.pos+len];
-		}
+		} else {
+      // shall not reach here
+      require(false);
+    }
 
     this.pos = this.pos + len;
     return ret;
   }
 
   function readBool() : bool {
-    return this.readBytes() != b'00';
+    bytes b = this.buf[this.pos : this.pos + 1];
+    this.pos = this.pos + 1;
+    return OpCode.OP_0 != b;
   }
 
   function readInt() : int {
@@ -70,6 +75,9 @@ contract Writer {
     }
     else if (n < 0x100000000) {
       header = b'4e' + Util.toLEUnsigned(n, 4);
+    } else {
+      // shall not reach here
+      require(false);
     }
 
     return header + b;
@@ -77,7 +85,7 @@ contract Writer {
 
   // uses fixed 1 byte to represent a boolean, plus length
   static function writeBool(bool x) : bytes {
-    return this.writeBytes(x ? b'01' : b'00');
+    return x ? OpCode.OP_1 : OpCode.OP_0;
   }
 
   // int is little endian

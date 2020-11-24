@@ -24,7 +24,6 @@ describe('Test sCrypt contract Counter In Javascript', () => {
     counter.setDataPart(num2bin(0, DataLen))
 
     const newLockingScript = [counter.codePart.toASM(), num2bin(1, DataLen)].join(' ')
-    console.log(counter.codePart.toASM())
 
     tx_.addOutput(new bsv.Transaction.Output({
       script: bsv.Script.fromASM(newLockingScript),
