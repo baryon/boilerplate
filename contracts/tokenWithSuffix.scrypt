@@ -1,0 +1,36 @@
+import "util.scrypt";
+
+/**
+* A toy token example can be tranfered
+*/
+contract Token {
+  public function transfer(PubKey sender, Sig senderSig, Ripemd160 receiver, SigHashPreimage txPreimage, int satoshis) {
+
+    // this ensures the preimage is for the current tx
+    require(Tx.checkPreimage(txPreimage));
+
+    // read previous locking script
+    bytes lockingScript = Util.scriptCode(txPreimage);
+    int scriptLen = len(lockingScript);
+
+    //flag is a2a5b31f6800, flag's len is 06, so suffixStart begins scriptLen - 7
+    int flagStart = scriptLen - 7;
+    require(lockingScript[flagStart : ] == b'06a2a5b31f6800');
+
+    // PublickKeyHash's len is 20bytes
+    int pkhStart = flagStart - 21;
+    Ripemd160 holderPKH = Ripemd160(lockingScript[pkhStart + 1 : flagStart]);
+
+    // authorize
+    require(hash160(sender) == holderPKH);
+    require(checkSig(senderSig, sender));
+
+    int blanceStart = pkhStart - Util.DataLen;
+    int balance = unpack(lockingScript[blanceStart : pkhStart]);
+
+    // write new locking script, b'14' is pkh length(20bytes)
+    bytes lockingScript_ = lockingScript[ : blanceStart] + num2bin(balance, Util.DataLen) + b'14' + receiver + b'06a2a5b31f6800';
+    bytes output = Util.buildOutput(lockingScript_, satoshis);
+    require(hash256(output) == Util.hashOutputs(txPreimage));
+  }
+}

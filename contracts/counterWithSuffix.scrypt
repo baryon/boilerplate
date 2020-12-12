@@ -1,0 +1,23 @@
+import "util.scrypt";
+
+contract Counter {
+  public function increment(SigHashPreimage txPreimage, int amount) {
+    require(Tx.checkPreimage(txPreimage));
+
+    bytes scriptCode = Util.scriptCode(txPreimage);
+    int scriptLen = len(scriptCode);
+    
+    //flag is fff1ff3a8767, flag's len is 06, so suffixStart begins scriptLen - 7
+    int suffixStart = scriptLen - 7; 
+    require(scriptCode[suffixStart : ] == b'06fff1ff3a8767');
+
+    // state (i.e., counter value) is at the end
+    int counter = unpack(scriptCode[suffixStart - Util.DataLen : suffixStart ]);
+    // increment counter
+    bytes scriptCode_ = scriptCode[ : suffixStart - Util.DataLen] + num2bin(counter + 1, Util.DataLen) +  b'06fff1ff3a8767';
+    bytes output = Util.buildOutput(scriptCode_, amount);
+    // ensure output is expected: amount is same with specified
+    // also output script is the same with scriptCode except counter incremented
+    require(hash256(output) == Util.hashOutputs(txPreimage));
+  }
+}
