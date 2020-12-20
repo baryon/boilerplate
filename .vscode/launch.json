@@ -187,6 +187,18 @@
             "Ripemd160(b'0176de27477fb7ffd7c99a7e9b931c22fd125c2b')"
         ]
       ]
+    },
+    {
+      "type": "scrypt",
+      "request": "launch",
+      "name": "Debug MultiSignBug",
+      "program": "${workspaceFolder}/contracts/MultiSignBug.scrypt",
+      "constructorParams": [
+      ],
+      "entryMethod": "unlock",
+      "entryMethodParams": [
+        "b'00'", "b'00'"
+      ]
     }
   ]
 }
