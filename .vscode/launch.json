@@ -191,6 +191,18 @@
     {
       "type": "scrypt",
       "request": "launch",
+      "name": "Debug P2PKH_Normal",
+      "program": "${workspaceFolder}/contracts/P2PKH_Normal.scrypt",
+      "constructorParams": [
+      ],
+      "entryMethod": "unlock",
+      "entryMethodParams": [
+        "b'30440220503a1d61d769d11793cd317c673d288516c7cce8034280b72ca76a24f2efab0302200cbc5717ea1db1856c84b1ac5ffc06f4248413aa1782642061d196249739bc8641'", "b'026f99c6e88e5f351691a5241f704879b01e082fdf2653bd9559498b61c516235b'"
+      ]
+    },
+    {
+      "type": "scrypt",
+      "request": "launch",
       "name": "Debug MultiSignBug",
       "program": "${workspaceFolder}/contracts/MultiSignBug.scrypt",
       "constructorParams": [

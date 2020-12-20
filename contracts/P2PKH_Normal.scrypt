@@ -1,0 +1,7 @@
+contract MultiSignBug {
+  public function unlock(bytes p0, bytes p1) {
+    asm {
+      OP_DUP OP_HASH160 10ca715f0eb9c5a89e6566aa611fadb853de6c53 OP_EQUALVERIFY OP_CHECKSIG
+    }
+  }
+}
