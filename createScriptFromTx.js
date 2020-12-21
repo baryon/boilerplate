@@ -1,4 +1,4 @@
-const { bsv, bin2num, num2bin } = require( 'scryptlib' )
+const bsv = require( 'bsv' )
 const WhatsOnChain = require( 'whatsonchain' )
 const _ = require( 'lodash' )
 
@@ -33,7 +33,7 @@ async function createScriptFromTx ( network, unlockTxId, inputIndex, scriptName 
   //fetch transaction from prevTxid
   const prevTx = await woc.txHash( prevTxid )
 
-  //analyse locking script from transaction's outputIndex
+  //analyse locking script
   const output = prevTx.vout[ outputIndex ]
   const asm = ( new bsv.Script( output.scriptPubKey.hex ) ).toASM()
   const fixedAsm = _.map( asm.split( ' ' ), ( item ) => {
@@ -61,7 +61,7 @@ contract ${scriptName} {
   console.log( contract )
   console.log( '<'.repeat( 10 ) + ` ${scriptName}.scrypt `, '\n' )
 
-
+//debug's setting, paste to .vscode/launch.json
   const debugSetting = `
 {
   "type": "scrypt",
