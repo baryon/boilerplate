@@ -1,7 +1,8 @@
 const path = require('path')
 const {
   readFileSync,
-  existsSync
+  existsSync,
+  mkdirSync
 } = require('fs')
 const {
   bsv,
@@ -145,7 +146,28 @@ function compileContract(fileName) {
   const filePath = path.join(__dirname, 'contracts', fileName)
   const out = path.join(__dirname, 'deployments/fixture/autoGen')
 
-  return compileContractImpl(filePath, out);
+  const result = compileContractImpl(filePath, out);
+  if (result.errors.length > 0) {
+    console.log(`Compile contract ${filePath} fail: `, result.errors)
+    throw result.errors;
+  }
+
+  return result;
+}
+
+function compileTestContract(fileName) {
+  const filePath = path.join(__dirname, 'tests', 'testFixture', fileName)
+  const out = path.join(__dirname, 'tests', 'out')
+  if (!existsSync(out)) {
+      mkdirSync(out)
+  }
+  const result = compileContractImpl(filePath, out);
+  if (result.errors.length > 0) {
+    console.log(`Compile contract ${filePath} fail: `, result.errors)
+    throw result.errors;
+  }
+
+  return result;
 }
 
 function loadDesc(fileName) {
@@ -178,6 +200,11 @@ function showError(error) {
   }
 };
 
+function padLeadingZero(hex) {
+  if(hex.length % 2 === 0) return hex;
+  return "0" + hex;
+}
+
 module.exports = {
   inputIndex,
   inputSatoshis,
@@ -194,5 +221,7 @@ module.exports = {
   compileContract,
   loadDesc,
   sighashType2Hex,
-  showError
+  showError,
+  compileTestContract,
+  padLeadingZero
 }
