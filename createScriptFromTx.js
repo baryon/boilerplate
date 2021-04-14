@@ -2,40 +2,16 @@ const bsv = require( 'bsv' )
 const WhatsOnChain = require( 'whatsonchain' )
 const _ = require( 'lodash' )
 
-async function createScriptFromTx ( network, unlockTxId, inputIndex, scriptName ) {
 
-  const woc = new WhatsOnChain( network )
-
-  //fetch transaction from unlocking tx
-  const unlockTx = await woc.txHash( unlockTxId )
-  const input = unlockTx.vin[ inputIndex ]
-  const prevTxid = input.txid
-  const outputIndex = input.vout
-  let params, unlockParams
-  const unlockASM = ( new bsv.Script( input.scriptSig.hex ) ).toASM()
-  const asms = _.map( unlockASM.split( ' ' ), ( item ) => {
-    switch ( item ) {
-      case '0':
-        return '00'
-      case '-1':
-        return '81'
-      default:
-        return item
-    }
-  } )
-  params = 'bytes p0'
-  unlockParams = `"b'${asms[ 0 ]}'"`
-  for ( let i = 1; i < asms.length; i++ ) {
-    params += `, bytes p${i}`
-    unlockParams += `, "b'${asms[ i ]}'"`
-  }
+async function createScriptFromTx ( woc, prevTxid, outputIndex, scriptName, unlockParams = '', debugParams = '', txContext = {} ) {
 
   //fetch transaction from prevTxid
-  const prevTx = await woc.txHash( prevTxid )
+  const prevTxHex = await woc.getRawTxData( prevTxid )
+  const prevTx = new bsv.Transaction(prevTxHex)
 
   //analyse locking script
-  const output = prevTx.vout[ outputIndex ]
-  const asm = ( new bsv.Script( output.scriptPubKey.hex ) ).toASM()
+  const output = prevTx.outputs[ outputIndex ]
+  const asm = output.script.toASM()
   const fixedAsm = _.map( asm.split( ' ' ), ( item ) => {
     switch ( item ) {
       case '0':
@@ -45,12 +21,12 @@ async function createScriptFromTx ( network, unlockTxId, inputIndex, scriptName 
       default:
         return item
     }
-  } ).join( ' ' )
+  } ).join( '\n' )
 
   //create scrypt file
   const contract = `
 contract ${scriptName} {
-  public function unlock(${params}) {
+  public function unlock(${unlockParams}) {
     asm {
       ${fixedAsm}
     }
@@ -68,12 +44,17 @@ contract ${scriptName} {
   "request": "launch",
   "name": "Debug ${scriptName}",
   "program": "\${workspaceFolder}/contracts/${scriptName}.scrypt",
-  "constructorParams": [
+  "constructorArgs": [
   ],
-  "entryMethod": "unlock",
-  "entryMethodParams": [
-    ${unlockParams}
-  ]
+  "pubFunc": "unlock",
+  "pubFuncArgs": [
+    ${debugParams}
+  ],
+  "txContext": {
+    "hex": "${txContext.hex}",
+    "inputIndex": ${txContext.inputIndex},
+    "inputSatoshis": ${prevTx.outputs[ outputIndex ].satoshis}
+  }
 }
   `
   console.log( `launche.json ` + '>'.repeat( 10 ) )
@@ -84,19 +65,61 @@ contract ${scriptName} {
   return { contract, debugSetting }
 }
 
-module.exports = createScriptFromTx
+async function createScriptFromUnlockTx ( woc, unlockTxId, inputIndex, scriptName ) {
+
+  //fetch transaction from unlocking tx
+  const unlockTxHex = await woc.getRawTxData( unlockTxId )
+  const unlockTx = new bsv.Transaction(unlockTxHex)
+
+  const input = unlockTx.inputs[ inputIndex ]
+
+  const prevTxid = input.prevTxId.toString('hex')
+  const outputIndex = input.outputIndex
+  let unlockParams, debugParams
+  const unlockASM = input.script.toASM()
+  const asms = _.map( unlockASM.split( ' ' ), ( item ) => {
+    switch ( item ) {
+      case '0':
+        return '00'
+      case '-1', 'OP_1NEGATE':
+        return '81'
+      default:
+        const m = item.match(/^OP_(\d+)$/)
+        if(m) {
+          const v = parseInt(m[1]).toString(16)
+          return v.length < 2 ? '0' + v : v
+        }
+        return item
+    }
+  } )
+  unlockParams = 'bytes p0'
+  debugParams = `"b'${asms[ 0 ]}'"`
+  for ( let i = 1; i < asms.length; i++ ) {
+    unlockParams += `, bytes p${i}`
+    debugParams += `, "b'${asms[ i ]}'"`
+  }
+
+  const txContext = {
+    hex: unlockTx.uncheckedSerialize(),
+    inputIndex
+  }
+
+  return createScriptFromTx(woc, prevTxid, outputIndex, scriptName, unlockParams, debugParams, txContext)
+}
+
 
 //network: testnet/livenet
-const network = 'livenet'
+const woc = new WhatsOnChain( 'livenet' )
 
 //unlocking tx
-const unlockTxId = '20adad8bd4cc694cfed4ccadff911433601e55b0f8779e839bc6579cb8d234f9'
-//const unlockTxId = 'fc5e29ae7aafeb774cc1f94c951381bff358af64e8ad33a8a932c2271c64f2a4'
+//const unlockTxId = '20adad8bd4cc694cfed4ccadff911433601e55b0f8779e839bc6579cb8d234f9'
+const unlockTxId = 'fc5e29ae7aafeb774cc1f94c951381bff358af64e8ad33a8a932c2271c64f2a4'
+//const unlockTxId = '83a1d69d99797aee3936ced2908a59428e33db1fdaeee4125f278a3815b64403'
 
-//outputIndex
+//Index
 const inputIndex = 0
 
 //scriptName
-const scriptName = 'MultiSignBug'
+const scriptName = 'SimpleP2PKH'
 
-createScriptFromTx( network, unlockTxId, inputIndex, scriptName )
+createScriptFromUnlockTx( woc, unlockTxId, inputIndex, scriptName )
